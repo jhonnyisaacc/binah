@@ -14,10 +14,12 @@ To add a new service, copy `_template.md`, fill every section (mark unknowns *un
 ## Part → services
 | Part | Services |
 |---|---|
-| every repo | [github](github.md), [cursor](cursor.md), [security](security.md) |
+| every repo | [github](github.md), [security](security.md) |
+| agent-written commits (Cursor or Grok Bot) or signed-commit rulesets | [signing](signing.md) |
+| Cursor cloud agents | [cursor](cursor.md) |
 | site | [cloudflare](cloudflare.md) |
 | api / worker | [railway](railway.md) |
-| mobile | [expo](expo.md) |
+| mobile | [expo](expo.md) (pick steps with its decision table) |
 | data | github (CI only); add a storage service file when one is used |
 
 davar declares: site, api, mobile, data.
