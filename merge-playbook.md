@@ -11,7 +11,7 @@ Placeholders: `<base>` is the project base the brief names, `<run>` is the run's
   ```
   gh repo edit --enable-auto-merge --enable-squash-merge --enable-merge-commit=false --enable-rebase-merge=false --delete-branch-on-merge=false
   ```
-- Ruleset on `<base>` (the production branch) only: one required check, `gate` (which covers CI, branch name, signed and no-AI-co-author commits, ratchets and stack limits; anything not built yet is marked planned in rules.md), squash only, linear history, signed commits, no force-push or deletion. Integration branches (`refactor/run-*`, `staging`) carry no rulesets and no required checks; CI still runs on every PR into them.
+- Ruleset on `<base>` (the production branch) only: one required check, `gate` (which covers CI, branch name, signed and no-AI-co-author commits, ratchets and stack limits; anything not built yet is marked planned in rules.md), squash only, linear history, signed commits, no force-push or deletion. Integration branches (`refactor/run-*`) carry no rulesets and no required checks; CI still runs on every PR into them.
 - Workflows: `automerge.yml` (turns on auto-merge when a PR is marked ready), `restack.yml` (retargets children after a merge), and the `stack-limits` check (section 3).
 - Verify before the first PR: open a throwaway PR, mark it ready, and confirm it squash-merges by itself and shows Verified.
   ```
