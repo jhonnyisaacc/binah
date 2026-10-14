@@ -1,4 +1,4 @@
-# Agent-friendly refactoring rules (v4.3, 2026-10-14)
+# Agent-friendly refactoring rules (v4.4, 2026-10-14)
 
 Versioning: MAJOR.MINOR. Bump the minor number for polish (wording, a new check, a resolved open question) and the major number for structural changes (new tiers, a new process stage, a changed role split). Every change gets a line in the changelog at the bottom.
 
@@ -75,7 +75,7 @@ Every repo gets this in its first setup PR, before refactoring starts.
 - Proof: a PR isn't done until it includes evidence from the control CLI for the features it touches.
 
 ## pstack
-Every code task is handed to a Cursor cloud agent running /poteto-mode. Within that flow, these skills are still applied by name: /create-verification-skill and /maintain-verification-skill (setup, then after feature changes); /correct, /how and /why (repo review, and whenever Jhonny repeats a correction twice); /architect (before Tier A designs); /blast-radius and /interrogate (before marking a risky PR ready); /tdd (every bug or CI fix); /no-comments; /setup-pstack once (models per role); /ketchup (Jhonny's catch-up after a run, typed only); /reflect then /automate-me after each run to grow a `jhonny-mode`. Skip the autopilot, orchestrate, and shipping playbooks.
+Every code change goes through a PR, and code changes and complex tasks (even ones that end up merged to `main`) are handed to a Cursor cloud agent running /poteto-mode. Small changes (docs, config tweaks, one-line fixes) may be made directly by Grok Bot or Refa, still signed and still through a PR when they touch code. Within the Cursor flow, these skills are still applied by name: /create-verification-skill and /maintain-verification-skill (setup, then after feature changes); /correct, /how and /why (repo review, and whenever Jhonny repeats a correction twice); /architect (before Tier A designs); /blast-radius and /interrogate (before marking a risky PR ready); /tdd (every bug or CI fix); /no-comments; /setup-pstack once (models per role); /ketchup (Jhonny's catch-up after a run, typed only); /reflect then /automate-me after each run to grow a `jhonny-mode`. Skip the autopilot, orchestrate, and shipping playbooks.
 
 ## Default stack for new projects
 React Native (mobile), React (web), Hono on Bun (server), shared Zod schemas package, and Python as a separate data worker behind a typed contract.
@@ -194,6 +194,7 @@ Applies only when the repo has a site on Cloudflare, Vercel, Netlify, or a simil
 
 ## Changelog
 - 4.3 (2026-10-14): A PR stays a draft while it is in development, so preview and deploy workflows do not run on every push. Mark it ready when it is ready for manual testing. This is not pstack's rule to open every PR ready. In a repo governed by these rules, this rule wins.
+- 4.4 (2026-10-14): code changes go through PRs; code and complex tasks go to Cursor /poteto-mode; small changes may be done directly by the bots.
 - 4.3 (2026-10-14): code tasks run through /poteto-mode; named pstack skills still apply inside it.
 - 4.2 (2026-10-13): PRs go draft, then ready, then `main`. No `staging` branch. Staging is a Railway environment only.
 - 4.1 (2026-10-13): after davar #320. No checks or rulesets on `staging`; `gate` is required on `main` only and CI runs on every PR. New PR flow: draft, then ready deploys the Cloudflare preview against Railway staging and, for API changes, deploys the PR to Railway staging (one PR at a time); Railway PR environments off. All AGENTS.md prefixes are used by type; the brief names the branch and the agent renames first (no dashboard default). Cloudflare Git integration stays for production; only its preview builds are turned off.
