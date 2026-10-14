@@ -1,6 +1,6 @@
-# Merge playbook (rules v3.0)
+# Merge playbook
 
-Rules v3.3 apply. Until a repo has the auto-merge setup, the agent that owns a PR merges it itself (`gh pr merge <n> --squash`) once it is ready, CI is green, `guard-paths` passes, and every Bugbot thread has a decision (fix commit or won't-fix reason) and is resolved. On marking a code PR ready the agent comments `bugbot run` itself; if Bugbot doesn't respond within ~15 minutes, it says so in its report and Refa posts `bugbot run` from Jhonny's account. Tier A PRs wait for Jhonny's approval label. Where this file says "auto-merge", read "the owning agent merges" until the setup exists.
+PR state follows rules.md. Open a PR as a draft while it is in development, so preview and deploy workflows do not run on every push. Mark it ready when it is ready for manual testing. pstack says to open every PR ready. In a repo governed by rules.md, rules.md wins. Until a repo has the auto-merge setup, the agent that owns a PR merges it itself (`gh pr merge <n> --squash`) once it is ready, CI is green, `guard-paths` passes, and every Bugbot thread has a decision (a fix commit or a won't-fix reason) and is resolved. On marking a code PR ready, the agent comments `bugbot run` itself. If Bugbot does not respond within about 15 minutes, the agent says so in its report and Refa posts `bugbot run` from Jhonny's account. Tier A PRs wait for Jhonny's approval label. Where this file says "auto-merge", read "the owning agent merges" until the setup exists.
 
 How a refactor run gets its PRs merged. The rules' Merging section is the summary; this file is the procedure. Commands use the gh CLI. While Cursor cloud agents treat gh as read-only, the gh write steps (turning on auto-merge, retargeting a child) run in the repo workflows named below, and agents run the git steps.
 
@@ -35,12 +35,13 @@ git fetch origin
 git switch -c refactor/<name> origin/<run>
 gh pr create --draft --base <run> --title "<title>" --body-file <body>
 ```
-- Work, commit signed, push. Before marking ready: the local check command passes, the proof is in the body, and every commit shows Verified.
+- Work on the draft. Commit signed and push. A push to a draft does not run preview or deploy workflows.
+- Mark the PR ready when the change is ready for manual testing. Before that, the local check command passes and every commit shows Verified.
   ```
   git log --format='%h %G? %s' origin/<run>..HEAD
   ```
   Every line shows `G`.
-- Mark ready. This is the hand-off; automerge.yml then runs `gh pr merge <n> --auto --squash`.
+- Marking ready starts the preview used for that test. For a code PR it also starts Bugbot. `automerge.yml` then runs `gh pr merge <n> --auto --squash`, which is the merge step in rules.md. Do not mark the PR ready while it is still in development.
   ```
   gh pr ready <n>
   gh pr merge <n> --auto --squash
@@ -111,7 +112,7 @@ git push -u origin refactor/revert-<n>
 gh pr create --base <run> --title "Revert #<n>" --body "Reverts #<n>: <run> red at <check>."
 gh pr merge --auto --squash
 ```
-The revert PR skips the draft step because there's nothing to prove beyond the checks going green.
+The revert PR opens ready. It is a one-step fix, not a development loop, so it does not stay a draft while someone is still writing the change. A later push to that ready PR does deploy a preview. Green checks are the proof.
 
 ## 8. Backlog recovery
 For a run that ended with many open, stacked PRs. Nothing new starts on the repo until this is done.
