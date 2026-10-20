@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Drop Co-authored-by trailers that name Cursor. Other trailers stay.
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+# shellcheck source=../scripts/lib/common.sh
+source "$root/scripts/lib/common.sh"
+
+strip_forbidden_trailers "$1" "$root/policy/forbidden-trailers"

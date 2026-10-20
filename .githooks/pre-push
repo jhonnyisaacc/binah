@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Reject a branch push whose name is outside policy/branch-name.regex.
+# main and master are the trunk, not pull-request heads.
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+zero=0000000000000000000000000000000000000000
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [[ $local_sha == "$zero" ]] && continue
+  [[ $remote_ref == refs/heads/* ]] || continue
+  name=${remote_ref#refs/heads/}
+  case $name in
+    main | master) continue ;;
+  esac
+  if ! "$root/scripts/check-branch-name.sh" "$name"; then
+    status=1
+  fi
+done
+
+exit "$status"
