@@ -129,7 +129,8 @@ printf '%s\n' "$out" | grep -q 'delete feat/old-merged'
 printf '%s\n' "$out" | grep -q 'keep refactor/run-01'
 printf '%s\n' "$out" | grep -q 'keep feat/parent'
 git --git-dir="$tmp/bare" fetch "$tmp/bare" >/dev/null 2>&1 || true
-if ! git --git-dir="$tmp/bare" log --format=%s feat/behind | grep -q '^Merge '; then
+subjects=$(git --git-dir="$tmp/bare" log --format=%s feat/behind)
+if ! printf '%s\n' "$subjects" | grep -q '^Merge '; then
   printf 'behind was not merged\n' >&2
   git --git-dir="$tmp/bare" log --oneline feat/behind >&2
   exit 1
