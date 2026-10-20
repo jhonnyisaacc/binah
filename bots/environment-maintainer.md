@@ -26,4 +26,7 @@ Routines (a starting set to tune):
 - Docs-change watch (weekly): fetch each service file's docs URL; if relevant steps changed, propose the edit; otherwise bump "Last verified".
 - Failed-deploy alerts: on a failed production or staging deploy, report the service, run link, and likely cause.
 - Quarterly catalog freshness review: re-verify every manual step and rotation period.
-- New-repo onboarding (on request): declare parts, list services, run automatable steps, hand Jhonny the manual list, then verify.
+- New-repo onboarding (on request): declare parts, list services, run automatable steps, hand Jhonny the manual list, then verify. Onboarding copies the policy kit with `scripts/install-policy-kit.sh` and does not replace the repository's dependency install. Pass `--mobile` when the repo ships an Expo app.
+- Daily keep-current: merge each open pull request's base into its head, never rebase, report conflicts, close a pull request already on its base, delete merged branches. Procedure in [routines/keep-current.md](routines/keep-current.md).
+- CI babysit: one fix agent per failing pull request or failing main build. Procedure in [routines/ci-babysit.md](routines/ci-babysit.md).
+- Review health: flag a ready pull request with no finished Bugbot check and no `Review pass:` comment. Procedure in [routines/review-health.md](routines/review-health.md).

@@ -41,6 +41,20 @@ jobs:
         working-directory: mobile
 ```
 
+## Release checks
+Copy `templates/expo-release/` into a repository that ships an Expo app. `scripts/install-policy-kit.sh --mobile` does that copy. From the repository root:
+
+```bash
+python3 templates/expo-release/check_expo_release.py --app <eas-project-root> --repo .
+```
+
+`--app` is the directory EAS uploads. The four checks, with the detail in `templates/expo-release/README.md`:
+
+- API URL. If the app config reads `EXPO_PUBLIC_API_URL` or `apiUrl`, a non-loopback https URL must exist. Loopback is `localhost`, `127.0.0.1`, `0.0.0.0`, or `10.0.2.2`.
+- `.easignore` must keep a path that source imports.
+- Auto-publish is Android-only. A workflow that runs `eas build` or `eas submit` on `push`, `workflow_dispatch`, or `release` must pass `--platform android` on that same line. `eas update` is not auto-publish. A workflow that only runs on `pull_request` is not auto-publish.
+- Versions. `expo.version` in `app.json` is manual and must be `x.y.z`. `eas.json` `build.production.autoIncrement` must be `true`, so EAS owns `versionCode` and `buildNumber`. A `runtimeVersion` policy of `appVersion` follows `expo.version`.
+
 ## Costs and limits
 EAS has a free tier with a monthly build allowance and queue priority for paid plans; exact numbers *unverified*, see https://expo.dev/pricing. Google Play has a one-time developer fee; Apple Developer is a yearly fee.
 

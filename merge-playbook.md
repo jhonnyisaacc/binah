@@ -1,6 +1,8 @@
 # Merge playbook
 
-PR state follows rules.md. Open a PR as a draft while it is in development, so preview and deploy workflows do not run on every push. Mark it ready when it is ready for manual testing. pstack says to open every PR ready. In a repo governed by rules.md, rules.md wins. Until a repo has the auto-merge setup, the agent that owns a PR merges it itself (`gh pr merge <n> --squash`) once it is ready, CI is green, `guard-paths` passes, and every Bugbot thread has a decision (a fix commit or a won't-fix reason) and is resolved. On marking a code PR ready, the agent comments `bugbot run` itself. If Bugbot does not respond within about 15 minutes, the agent says so in its report and Refa posts `bugbot run` from Jhonny's account. Tier A PRs wait for Jhonny's approval label. Where this file says "auto-merge", read "the owning agent merges" until the setup exists.
+Version: 4.6 (matches rules.md).
+
+PR state follows rules.md. Open a PR as a draft while it is in development, so preview and deploy workflows do not run on every push. Mark it ready when it is ready for manual testing. pstack says to open every PR ready. In a repo governed by rules.md, rules.md wins. Until a repo has the auto-merge setup, the agent that owns a PR merges it itself (`gh pr merge <n> --squash`) once it is ready, CI is green, `guard-paths` passes, and every Bugbot thread has a decision (a fix commit or a won't-fix reason) and is resolved. While the pull request is still a draft, and before it is marked ready, the agent arranges a `bugbot run` comment. Bugbot ignores agent accounts, so `bugbot-trigger.yml` or Refa posts it as Jhonny. If no finished Bugbot check appears within 15 minutes, the agent writes one pstack review pass as a comment that starts a line with `Review pass:`, then marks the pull request ready. Tier A PRs wait for Jhonny's approval label. Where this file says "auto-merge", read "the owning agent merges" until the setup exists.
 
 How a refactor run gets its PRs merged. The rules' Merging section is the summary; this file is the procedure. Commands use the gh CLI. While Cursor cloud agents treat gh as read-only, the gh write steps (turning on auto-merge, retargeting a child) run in the repo workflows named below, and agents run the git steps.
 
@@ -36,12 +38,13 @@ git switch -c refactor/<name> origin/<run>
 gh pr create --draft --base <run> --title "<title>" --body-file <body>
 ```
 - Work on the draft. Commit signed and push. A push to a draft does not run preview or deploy workflows.
-- Mark the PR ready when the change is ready for manual testing. Before that, the local check command passes and every commit shows Verified.
+- Mark the PR ready when the change is ready for manual testing. Before that, the local check command passes, every commit shows Verified, and a review has already run.
   ```
   git log --format='%h %G? %s' origin/<run>..HEAD
   ```
   Every line shows `G`.
-- Marking ready starts the preview used for that test. For a code PR it also starts Bugbot. `automerge.yml` then runs `gh pr merge <n> --auto --squash`, which is the merge step in rules.md. Do not mark the PR ready while it is still in development.
+- While the pull request is still a draft, comment `bugbot run` (posted as Jhonny). Wait up to 15 minutes for a finished Bugbot check (`SUCCESS`, `FAILURE`, or `NEUTRAL`). If none appears, write a comment that starts a line with `Review pass:` after one pstack review pass. Then mark the pull request ready.
+- Marking ready starts the preview used for that test. `automerge.yml` then runs `gh pr merge <n> --auto --squash`, which is the merge step in rules.md. Do not mark the PR ready while it is still in development. The review already happened in the previous step.
   ```
   gh pr ready <n>
   gh pr merge <n> --auto --squash
@@ -73,6 +76,8 @@ gh pr create --draft --base <run> --title "<title>" --body-file <body>
 - The `stack-limits` check runs the same map on every PR event and fails when this PR's depth is over 2 or the run has more than 5 open PRs.
 
 ## 4. After a parent merges: retarget and restack
+Daily keep-current is a different operation. `scripts/keep-current.sh` merges the pull request's base into its head and never rebases, so signatures stay. This section replays only the child's own commits after a parent squash, then signs them again.
+
 GitHub doesn't reliably retarget children when a merged branch is deleted through the API, and a child whose base branch is deleted can get closed. So branches aren't deleted during the run, and children are retargeted explicitly.
 - restack.yml, on a merged PR, retargets each child and comments the parent's last head commit on it:
   ```
@@ -163,3 +168,18 @@ For a run that ended with many open, stacked PRs. Nothing new starts on the repo
   | Tier A items blocked, each with its PR | |
   | Rule violations found (limit breaches, unverified commits, wrong branch names, `legacy-names` matches, PRs merged out of order) | |
   | Proposed rule changes (suggestions only; Jhonny approves) | |
+
+## 10. Redo a pull request
+Use this when the outcome is still wanted and the open pull request cannot be kept. A wrong base, unsigned history, or a branch name that cannot be renamed cleanly are the usual cases. The replacement branch already exists and its commits are signed. Its name matches `policy/branch-name.regex`.
+
+`scripts/redo-pr.sh` checks the branch name before any GitHub call. Without `--apply` it prints the plan. With `--apply` it does the four steps.
+
+1. Open a replacement draft from that branch. The body links the old pull request.
+2. Comment on the old pull request with `Replaced by #N.`
+3. Close the old pull request.
+4. Delete the old branch unless an open pull request uses it as a base.
+
+```
+bash scripts/redo-pr.sh --repo <owner>/<name> --old <n> --branch <prefix>/<name> --title "<title>" --base <base>
+bash scripts/redo-pr.sh --repo <owner>/<name> --old <n> --branch <prefix>/<name> --title "<title>" --base <base> --apply
+```

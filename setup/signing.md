@@ -33,7 +33,7 @@ Optional key map (`setup/signing-keys.md` in a repo, or this table): key title �
 2. https://github.com/settings/ssh/new → Key type **Signing Key** → title `<actor>` (`cursor` or `grokbot`) → paste `~/agent-signing.pub` → Add.
 3. `base64 -i ~/agent-signing | pbcopy` and paste it into the actor's secret store (Cursor: `SSH_SIGNING_KEY_BASE64`; box: the box secret). Never in chat or a repo.
 4. `rm ~/agent-signing ~/agent-signing.pub`
-5. Cursor environment setup script (see cursor.md) decodes it and sets `gpg.format ssh`, `user.signingkey`, `commit.gpgsign true`, `core.hooksPath .githooks`. The repo's `.githooks/commit-msg` strips any `Co-authored-by: ... cursoragent@cursor.com` line.
+5. The agent runs `bash scripts/agent-preflight.sh` before the first commit (see cursor.md and `skills/agent-preflight/SKILL.md`). That script decodes `SSH_SIGNING_KEY_BASE64`, sets `gpg.format ssh`, `user.signingkey`, and `commit.gpgsign true`, and installs the hooks. `.githooks/commit-msg` strips a `Co-authored-by` line that names Cursor. Other co-author lines stay.
 
 ## Secrets and tokens
 | Name | Where stored | Scope | Rotation |
