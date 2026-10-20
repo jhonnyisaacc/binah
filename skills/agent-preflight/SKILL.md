@@ -33,6 +33,10 @@ A generic "run this repo's policy script before push" mechanism belongs in pstac
 
 On a cloud agent, Cursor's commit-msg hook appends its trailer after the repository hook. `agent-preflight.sh` detects that dispatcher (a hooks directory that contains `.dispatcher`), points it at `.githooks`, and adds a later hook that strips the Cursor trailer again. Do not set `core.hooksPath` to `.githooks` on that machine. That would skip Cursor's secret scanner.
 
+## Design files
+
+Before editing UI, run `bash scripts/sync-design-files.sh`. It checks out `*.pen` files and `design/` from `origin/main` when this branch has not changed them. It leaves local design edits in place. Copy the `Design files:` line it prints into the pull request body.
+
 ## What Refa copies into each repository
 
 `scripts/install-policy-kit.sh <repo>` copies the policy files, the hooks, this skill, the pull request template, and the preflight script. It then updates `.cursor/environment.json`. For a repository with an Expo app, pass `--mobile` so the Expo release check is copied too.
