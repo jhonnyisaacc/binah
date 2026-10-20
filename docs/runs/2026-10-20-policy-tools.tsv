@@ -1,0 +1,20 @@
+ts	phase	decision	why	evidence	result
+2026-10-20T16:55:00Z	frame	skipped the how-explainer	the catalog was already read and a background explainer cannot return in the same turn	rules.md	skipped
+2026-10-20T17:02:53Z	policy	locked the operator regex and did not ban a hash suffix	the operator locked the pattern, and feat/definitions-ae37 still matches it	83db710943938b249868fc63a513a74e5cfea6e1	tests green
+2026-10-20T17:02:53Z	policy	strip only a Co-authored-by line that names Cursor	other co-authors are real and must stay	83db710943938b249868fc63a513a74e5cfea6e1	tests green
+2026-10-20T17:03:48Z	preflight	merged origin/main instead of rebasing when the push was rejected	a rebase drops signatures	6171d90191a27de462c774c98d7fc1c176f2adc2	gpgsig present
+2026-10-20T17:05:44Z	preflight	added a late stripper and left the Cursor dispatcher in place	Cursor appends its trailer after the repo hook, and replacing hooksPath would skip the secret scanner	8b2260ef3fa2adaac2b834cde79931f948dcfb14	tests green
+2026-10-20T17:05:44Z	preflight	the agent runs the script before the first commit even when environment.json names it	install is baked into the snapshot and start does not block the agent	8b2260ef3fa2adaac2b834cde79931f948dcfb14	tests green
+2026-10-20T17:07:41Z	pr	required Why, What changed, How to test, phone steps, and a design-files line	those were the missing review facts, encoded as a check	6750368097d48bcd7b878e05bc904f40d09bbe06	tests green
+2026-10-20T17:09:19Z	review	flag a ready pull request with no finished Bugbot check and no Review pass line	drafts stay unflagged, and a generic block-before-ready gate belongs in pstack	f1d7920792b7f8295fdbd51d880f29a664b67706	tests green
+2026-10-20T17:12:29Z	bots	keep-current merges each pull request base and never rebases	a stacked child must meet its parent, and a rebase drops signatures	f19456f52d9a008c16a0a90b2e1af10c9ccd1373	tests green
+2026-10-20T17:12:29Z	bots	ci-babysit lists and claims one task per pull request sha or main sha and does not launch the agent	two failed jobs on one commit are one fix, and the bot prompt does the launch	f19456f52d9a008c16a0a90b2e1af10c9ccd1373	tests green
+2026-10-20T17:12:29Z	bots	redo-pr checks the branch name before any GitHub call	a bad name should fail before a draft exists	f19456f52d9a008c16a0a90b2e1af10c9ccd1373	tests green
+2026-10-20T17:12:29Z	bots	bot scripts stay in binah and are not copied into app repos	the kit an app runs is the preflight, hooks, body check, and design sync	f19456f52d9a008c16a0a90b2e1af10c9ccd1373	tests green
+2026-10-20T17:15:59Z	tests	read merge subjects into a variable before grepping	pipefail plus grep -q made a real merge look missing	ccb56b4a6ce613a3cff1a82b0799ae844e06947b	suite green
+2026-10-20T17:16:12Z	expo	added a reusable release-check template and left davar wiring in davar	the four checks are generic and the repo-specific fixes are not	07830ded5999573bff44077ecb85613d046487bb	tests green
+2026-10-20T17:20:36Z	docs	bumped the catalog to v4.6 and left the v4.5 changelog in place	v4.5 had already landed on origin/main in 3dab01f	85df0bc03c26d522cf31047dcddc515338f2f534	policy sync ok
+2026-10-20T17:20:36Z	delivery	committed straight to main and did not open a pull request	the operator overrode the cloud-agent pull-request rule for this early repo	85df0bc03c26d522cf31047dcddc515338f2f534	pushed
+2026-10-20T17:20:36Z	scope	left proposal E, proposal G, and the generic review-before-ready gate upstream	those mechanisms are pstack, including issue 626	skills/agent-preflight/SKILL.md	noted not built
+2026-10-20T17:20:36Z	identity	left the Jhonny co-author line this cloud agent appends	it is not the Cursor trailer the policy forbids	85df0bc03c26d522cf31047dcddc515338f2f534	Cursor trailer absent
+2026-10-20T17:20:36Z	docs	left rules.md over the file-size ratchet	it was already about 41KB before this edit, and splitting the catalog was out of scope	rules.md	open
