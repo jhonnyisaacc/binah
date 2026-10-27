@@ -35,7 +35,7 @@ Repo under `jhonnyisaacc`; 2FA on the account.
 2FA; secret scanning + push protection on; Dependabot alerts on; rulesets on `main`; fine-grained tokens only, one repo, expiring.
 
 ## Branch names and pull request bodies
-The branch pattern is the one line in binah `policy/branch-name.regex`. Refa copies it with `scripts/install-policy-kit.sh`. The same install copies `templates/pull_request_template.md` to `.github/pull_request_template.md`. A body needs `## Why`, `## What changed`, and `## How to test`. Mobile changes add phone steps. UI changes name the design files the agent pulled with `scripts/sync-design-files.sh`.
+The branch pattern is the one line in binah `policy/branch-name.regex`. Refa copies it with `scripts/binah-install`. The same install copies `templates/pull_request_template.md` to `.github/pull_request_template.md` and wires the hygiene job (branch name, pull request body, signing preflight, one pull request one job, current-tree secret scan). A body needs `## Why`, `## What changed`, and `## How to test`. Mobile changes add phone steps. UI changes name the design files the agent pulled with `scripts/sync-design-files.sh`.
 
 ## How to verify it works
 A test PR: `gate` reports, branch-name and signature checks pass, Bugbot trigger comments `bugbot run` on ready, merge blocked until `gate` is green.

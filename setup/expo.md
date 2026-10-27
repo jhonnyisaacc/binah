@@ -42,7 +42,7 @@ jobs:
 ```
 
 ## Release checks
-Copy `templates/expo-release/` into a repository that ships an Expo app. `scripts/install-policy-kit.sh --mobile` does that copy. From the repository root:
+Copy `templates/expo-release/` into a repository that ships an Expo app. `scripts/binah-install --mobile` does that copy. `scripts/install-policy-kit.sh --mobile` calls it. From the repository root:
 
 ```bash
 python3 templates/expo-release/check_expo_release.py --app <eas-project-root> --repo .
