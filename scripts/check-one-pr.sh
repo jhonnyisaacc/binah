@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # One pull request, one job.
 # Fails when a later pull request has been merged into a pull that is still
-# open. Fails when the pull is too big for the stack limits in rules.md
+# open. A bottom pull request labeled backlog-recovery is the backlog
+# recovery fold (children merged into that pull). That fold passes. A fold
+# without the label still fails. Keep-current and restack are not pull
+# requests and do not trip this.
+# Fails when the pull is too big for the stack limits in rules.md
 # (Merging) and merge-playbook.md section 3: stack depth at most 2, and at
 # most 5 open pull requests not counting the integration pull request.
+# Open no new pull request: ordered by createdAt ascending, the oldest 5
+# stay allowed and the 6th and later fail.
 # The smaller cap is 2. An empty template sentence is not a pass.
 # Merges into an open refactor/run-<nn> integration pull request are the
 # run's normal merges, so that pull request is not the later-merge failure.
@@ -50,7 +56,7 @@ if [[ -z $prs ]]; then
   prs=$(mktemp)
   owned=1
   gh pr list --repo "$repo" --state all --limit 200 \
-    --json number,state,createdAt,baseRefName,headRefName,isDraft >"$prs"
+    --json number,state,createdAt,baseRefName,headRefName,isDraft,labels >"$prs"
 fi
 
 set +e
@@ -61,8 +67,11 @@ import sys
 
 # rules.md Merging: "stack depth at most 2" and "at most 5 open PRs".
 # merge-playbook.md section 3 states the same numbers. Smaller cap is 2.
+# Open no new pull request: the oldest MAX_OPEN stay allowed.
+# backlog-recovery on the still-open bottom pull is the recovery fold.
 MAX_DEPTH = 2
 MAX_OPEN = 5
+RECOVERY = "backlog-recovery"
 INTEGRATION = re.compile(r"refactor/run-[0-9]+\Z")
 
 path, number = sys.argv[1], int(sys.argv[2])
@@ -76,6 +85,16 @@ if not isinstance(data, list):
     sys.exit(2)
 
 
+def label_names(pr):
+    names = []
+    for label in pr.get("labels") or []:
+        if isinstance(label, str):
+            names.append(label)
+        elif isinstance(label, dict):
+            names.append(str(label.get("name") or ""))
+    return names
+
+
 def norm(pr):
     return {
         "number": int(pr["number"]),
@@ -83,6 +102,7 @@ def norm(pr):
         "created": str(pr.get("createdAt") or ""),
         "base": str(pr.get("baseRefName") or ""),
         "head": str(pr.get("headRefName") or ""),
+        "labels": label_names(pr),
     }
 
 
@@ -102,7 +122,7 @@ def integration(name):
 by_head = {pr["head"]: pr for pr in prs if pr["state"] == "OPEN"}
 messages = []
 
-if not integration(current["head"]):
+if not integration(current["head"]) and RECOVERY not in current["labels"]:
     for other in prs:
         if other["number"] == current["number"]:
             continue
@@ -132,11 +152,18 @@ if depth > MAX_DEPTH:
         f"pull is too big: stack depth {depth} is over the limit of {MAX_DEPTH} (rules.md: stack depth at most 2)"
     )
 
-open_count = sum(1 for pr in prs if pr["state"] == "OPEN" and not integration(pr["head"]))
-if open_count > MAX_OPEN:
-    messages.append(
-        f"pull is too big: {open_count} open pull requests is over the limit of {MAX_OPEN} (rules.md: at most 5 open PRs)"
-    )
+open_prs = sorted(
+    (pr for pr in prs if pr["state"] == "OPEN" and not integration(pr["head"])),
+    key=lambda pr: (pr["created"], pr["number"]),
+)
+if len(open_prs) > MAX_OPEN:
+    for rank, pr in enumerate(open_prs):
+        if pr["number"] != current["number"] or rank < MAX_OPEN:
+            continue
+        messages.append(
+            f"pull is too big: open pull request #{current['number']} is past the oldest {MAX_OPEN} and over the limit of {MAX_OPEN} (rules.md: at most 5 open PRs; open no new PR)"
+        )
+        break
 
 if messages:
     for message in messages:

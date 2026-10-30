@@ -45,6 +45,18 @@ write '[
 expect_fail 1 'later pull request #2'
 
 write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}]},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
+]'
+expect_pass 1
+
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"other"}]},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
+]'
+expect_fail 1 'later pull request #2'
+
+write '[
   {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one"},
   {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"main","headRefName":"feat/two"}
 ]'
@@ -74,7 +86,27 @@ for n in 1 2 3 4 5 6; do
 done
 open+=']'
 write "$open"
+expect_pass 1
+expect_pass 2
+expect_pass 3
+expect_pass 4
+expect_pass 5
+expect_fail 6 'over the limit of 5'
+
+# createdAt order, not number order. The 6th and later fail.
+write '[
+  {"number":9,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/old"},
+  {"number":8,"state":"OPEN","createdAt":"2026-10-02T00:00:00Z","baseRefName":"main","headRefName":"feat/b"},
+  {"number":7,"state":"OPEN","createdAt":"2026-10-03T00:00:00Z","baseRefName":"main","headRefName":"feat/c"},
+  {"number":4,"state":"OPEN","createdAt":"2026-10-04T00:00:00Z","baseRefName":"main","headRefName":"feat/d"},
+  {"number":3,"state":"OPEN","createdAt":"2026-10-05T00:00:00Z","baseRefName":"main","headRefName":"feat/e"},
+  {"number":1,"state":"OPEN","createdAt":"2026-10-06T00:00:00Z","baseRefName":"main","headRefName":"feat/sixth"},
+  {"number":2,"state":"OPEN","createdAt":"2026-10-07T00:00:00Z","baseRefName":"main","headRefName":"feat/seventh"}
+]'
+expect_pass 9
+expect_pass 3
 expect_fail 1 'over the limit of 5'
+expect_fail 2 'over the limit of 5'
 
 write '[
   {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"refactor/run-01"},

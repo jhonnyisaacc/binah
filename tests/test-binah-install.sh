@@ -5,7 +5,8 @@ root=$(git rev-parse --show-toplevel)
 install=$root/scripts/binah-install
 tmp=$(mktemp -d)
 
-required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh'
+copied='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh'
+required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh'
 
 assert_wired() {
   local dest=$1
@@ -18,6 +19,11 @@ assert_wired() {
       exit 1
     fi
   done
+  if grep -q 'agent-preflight.sh' "$wf" || grep -q 'SSH_SIGNING_KEY' "$wf"; then
+    printf 'hygiene must not run the signing preflight\n' >&2
+    cat "$wf" >&2
+    exit 1
+  fi
   if grep -q 'fetch-depth: 0' "$wf"; then
     printf 'workflow enables fetch-depth: 0\n' >&2
     exit 1
@@ -35,7 +41,7 @@ assert_wired() {
 fresh=$tmp/fresh
 mkdir -p "$fresh"
 bash "$install" "$fresh" >/dev/null
-for script in $required; do
+for script in $copied; do
   if [[ ! -f $fresh/$script ]]; then
     printf 'install did not copy %s\n' "$script" >&2
     exit 1

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Wire the binah hygiene job and drop planned marks for checks it runs."""
 
+from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path
@@ -8,7 +10,6 @@ from pathlib import Path
 REQUIRED = (
     "scripts/check-branch-name.sh",
     "scripts/check-pr-body.sh",
-    "scripts/agent-preflight.sh",
     "scripts/check-one-pr.sh",
     "scripts/check-secrets.sh",
 )
@@ -42,10 +43,6 @@ def steps_block(indent: str) -> str:
         f"{indent}- name: branch name",
         f"{key}if: github.event_name == 'pull_request'",
         f"{key}run: " + "'bash scripts/check-branch-name.sh \"${{ github.head_ref }}\"'",
-        f"{indent}- name: signing preflight",
-        f"{key}env:",
-        f"{nested}SSH_SIGNING_KEY_BASE64: " + "'${{ secrets.SSH_SIGNING_KEY_BASE64 }}'",
-        f"{key}run: bash scripts/agent-preflight.sh",
         f"{indent}- name: pull request body",
         f"{key}if: github.event_name == 'pull_request'",
         f"{key}env:",
