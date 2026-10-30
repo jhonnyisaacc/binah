@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Install the binah policy kit into a repository and wire its hygiene job.
+# Does not commit. install-policy-kit.sh calls this command.
+set -euo pipefail
+
+usage() {
+  printf 'usage: binah-install [--mobile] <target-repo>\n       binah-install --check <target-repo>\n' >&2
+  exit 2
+}
+
+mobile=0
+check_only=0
+target=
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --mobile) mobile=1 ;;
+    --check) check_only=1 ;;
+    -h | --help) usage ;;
+    *)
+      if [[ -n $target ]]; then
+        usage
+      fi
+      target=$1
+      ;;
+  esac
+  shift
+done
+[[ -n $target ]] || usage
+
+src=$(cd "$(dirname "$0")/.." && pwd)
+target=$(cd "$target" && pwd)
+
+if [[ $check_only -eq 1 ]]; then
+  python3 "$src/scripts/lib/wire-hygiene.py" --check "$target"
+  exit
+fi
+
+copy_file() {
+  local from=$1
+  local to=$2
+  mkdir -p "$(dirname "$to")"
+  if [[ -f $to ]] && cmp -s "$from" "$to"; then
+    return 0
+  fi
+  cp "$from" "$to"
+  if [[ -x $from ]]; then
+    chmod +x "$to"
+  fi
+}
+
+require_copy() {
+  local rel=$1
+  if [[ ! -f $src/$rel ]]; then
+    printf 'binah-install: missing %s\n' "$rel" >&2
+    exit 1
+  fi
+  copy_file "$src/$rel" "$target/$rel"
+}
+
+require_copy policy/author
+require_copy policy/branch-name.regex
+require_copy policy/forbidden-trailers
+require_copy scripts/lib/common.sh
+require_copy scripts/agent-preflight.sh
+require_copy scripts/check-branch-name.sh
+require_copy scripts/check-pr-body.sh
+require_copy scripts/check-one-pr.sh
+require_copy scripts/check-secrets.sh
+require_copy .githooks/commit-msg
+require_copy .githooks/pre-push
+copy_file "$src/skills/agent-preflight/SKILL.md" "$target/.cursor/skills/agent-preflight/SKILL.md"
+
+if [[ ! -f $target/policy/secret-allowlist ]]; then
+  copy_file "$src/policy/secret-allowlist" "$target/policy/secret-allowlist"
+fi
+if [[ -f $src/scripts/sync-design-files.sh ]]; then
+  copy_file "$src/scripts/sync-design-files.sh" "$target/scripts/sync-design-files.sh"
+fi
+if [[ -f $src/templates/pull_request_template.md ]]; then
+  copy_file "$src/templates/pull_request_template.md" "$target/.github/pull_request_template.md"
+fi
+if [[ $mobile -eq 1 && -f $src/templates/expo-release/check_expo_release.py ]]; then
+  copy_file "$src/templates/expo-release/check_expo_release.py" "$target/templates/expo-release/check_expo_release.py"
+  if [[ -f $src/templates/expo-release/README.md ]]; then
+    copy_file "$src/templates/expo-release/README.md" "$target/templates/expo-release/README.md"
+  fi
+fi
+
+run_kit() {
+  python3 "$src/scripts/lib/wire-hygiene.py" --check "$target"
+  (cd "$target" && bash scripts/check-secrets.sh)
+  if [[ -d $target/.git || -f $target/.git ]]; then
+    (cd "$target" && bash scripts/check-branch-name.sh feat/binah-install)
+  fi
+  local body prs
+  body=$(mktemp)
+  prs=$(mktemp)
+  cat >"$body" <<'EOF'
+## Why
+
+The hygiene job runs the policy checks.
+
+## What changed
+
+binah-install wired the checks.
+
+## How to test
+
+Run tests/run.sh.
+EOF
+  (cd "$target" && bash scripts/check-pr-body.sh "$body")
+  cat >"$prs" <<'EOF'
+[{"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one"}]
+EOF
+  bash "$target/scripts/check-one-pr.sh" --prs "$prs" --number 1
+  rm -f "$body" "$prs"
+}
+
+python3 "$src/scripts/merge-cursor-environment.py" "$target/.cursor/environment.json"
+python3 "$src/scripts/lib/wire-hygiene.py" "$target"
+run_kit
+printf 'binah-install: installed into %s\n' "$target"

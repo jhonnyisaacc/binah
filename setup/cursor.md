@@ -17,7 +17,7 @@ Cursor GitHub integration on the repo; Bugbot set to "Run only when mentioned"; 
 | iOS simulators, Xcode, macOS-only tools | self-hosted Mac pool (*unverified* availability on Pro+; see docs) |
 
 ## Template setup script
-Refa does not replace a repository's dependency install. She merges the preflight into the existing `.cursor/environment.json` with `scripts/merge-cursor-environment.py`. `scripts/install-policy-kit.sh` copies the policy files and then runs that merge.
+Refa does not replace a repository's dependency install. She merges the preflight into the existing `.cursor/environment.json` with `scripts/merge-cursor-environment.py`. `scripts/binah-install` copies the policy files, wires the hygiene job, and then runs that merge. `scripts/install-policy-kit.sh` calls it.
 
 The install command becomes `bash scripts/agent-preflight.sh && <existing install>`. The start command runs `bash scripts/agent-preflight.sh` and then the existing start command.
 

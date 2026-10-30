@@ -6,7 +6,11 @@ root=$(git rev-parse --show-toplevel)
 # shellcheck source=lib/common.sh
 source "$root/scripts/lib/common.sh"
 
-name=${1:-$(git symbolic-ref --short HEAD)}
+if [[ $# -ge 1 ]]; then
+  name=$1
+else
+  name=$(git symbolic-ref --short HEAD)
+fi
 regex_file=$root/policy/branch-name.regex
 
 if branch_name_allowed "$name" "$regex_file"; then
