@@ -48,6 +48,34 @@ write '[
   {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}]},
   {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
 ]'
+expect_fail 1 'later pull request #2'
+
+owner=$(sed -n 's/^name=//p' "$root/policy/author")
+write "$(cat <<EOF
+[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}],"labelEvents":[{"event":"labeled","actor":"cursor[bot]","label":"backlog-recovery","createdAt":"2026-10-03T00:00:00Z"}]},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
+]
+EOF
+)"
+expect_fail 1 'later pull request #2'
+
+write "$(cat <<EOF
+[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}],"labelEvents":[{"event":"labeled","actor":"${owner}","label":"backlog-recovery","createdAt":"2026-10-02T00:00:00Z"},{"event":"unlabeled","actor":"${owner}","label":"backlog-recovery","createdAt":"2026-10-03T00:00:00Z"},{"event":"labeled","actor":"cursor[bot]","label":"backlog-recovery","createdAt":"2026-10-04T00:00:00Z"}]},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
+]
+EOF
+)"
+expect_fail 1 'later pull request #2'
+
+write "$(cat <<EOF
+[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}],"labelEvents":[{"event":"labeled","actor":"${owner}","label":"backlog-recovery","createdAt":"2026-10-03T00:00:00Z"}]},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
+]
+EOF
+)"
 expect_pass 1
 
 write '[

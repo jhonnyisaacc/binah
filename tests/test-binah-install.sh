@@ -24,6 +24,11 @@ assert_wired() {
     cat "$wf" >&2
     exit 1
   fi
+  if ! grep -w -q opened "$wf" || ! grep -w -q synchronize "$wf" || ! grep -w -q reopened "$wf" || ! grep -w -q labeled "$wf" || ! grep -w -q unlabeled "$wf"; then
+    printf 'hygiene should re-run when a label is added or removed\n' >&2
+    cat "$wf" >&2
+    exit 1
+  fi
   if grep -q 'fetch-depth: 0' "$wf"; then
     printf 'workflow enables fetch-depth: 0\n' >&2
     exit 1
