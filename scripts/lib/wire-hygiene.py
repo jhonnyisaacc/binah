@@ -14,6 +14,22 @@ REQUIRED = (
     "scripts/check-secrets.sh",
 )
 
+# This sentence is the Merging rule in rules.md. tests/test-policy-sync.sh
+# fails when the two copies differ.
+ONE_PULL_SENTENCE = (
+    "One pull request is one job. A later pull request merged into a pull that is still open fails that pull. "
+    "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in `policy/backlog-recovery`. "
+    "The integration pull request (`refactor/run-*`) is where those merges land, so it is not that failure. "
+    "A fold passes only when `policy/backlog-recovery` on the pull's base branch lists this pull's number. "
+    "The check reads that file with `git show` of `origin/<base>:policy/backlog-recovery` and never the pull's head. "
+    "A missing file or a failed read counts as not listed. "
+    "Adding a number to `policy/backlog-recovery` is Tier A (editing guardrail files) and needs Jhonny's approval. "
+    "The label approach was dropped because agents hold Jhonny's credentials. "
+    "Enforcement: `scripts/check-one-pr.sh` in the `hygiene` job. "
+    "It fails when stack depth is over 2 (`stack depth 3 is over the limit of 2`) or this pull is the 6th or later open pull (`pull #N is the 6th open pull; the limit is 5`). "
+    "`binah-install` wires that call."
+)
+
 REPLACEMENTS = (
     (
         "Enforcement: `scripts/check-pr-body.sh`. Calling it from each repo's `hygiene` job is (planned) until Refa wires it.",
@@ -25,7 +41,7 @@ REPLACEMENTS = (
     ),
     (
         "A required `stack-limits` step in `hygiene` fails a PR that breaks either limit (planned until built).",
-        "One pull request is one job. A later pull request merged into a pull that is still open fails that pull. Enforcement: `scripts/check-one-pr.sh` in the `hygiene` job. It fails when stack depth is over 2 or the run has more than 5 open pull requests. `binah-install` wires that call.",
+        ONE_PULL_SENTENCE,
     ),
 )
 
@@ -71,7 +87,6 @@ def new_workflow() -> str:
         "name: hygiene\n"
         "on:\n"
         "  pull_request:\n"
-        "    types: [opened, synchronize, reopened, labeled, unlabeled]\n"
         "  push:\n"
         "    branches:\n"
         "      - main\n"
@@ -82,7 +97,6 @@ def new_workflow() -> str:
         "permissions:\n"
         "  contents: read\n"
         "  pull-requests: read\n"
-        "  issues: read\n"
         "jobs:\n"
         "  hygiene:\n"
         "    runs-on: ubuntu-latest\n"
@@ -263,95 +277,6 @@ def append_hygiene_job(text: str) -> str:
     return text + "jobs:\n" + job
 
 
-PR_TYPES = ("opened", "synchronize", "reopened", "labeled", "unlabeled")
-
-
-def ensure_pr_types(text: str) -> str:
-    """Re-run hygiene when a label is added or removed.
-
-    GitHub's default pull_request types are opened, synchronize, and
-    reopened. Naming types replaces that default, so those three stay.
-    A close or merge of a different pull is not an event on this pull.
-    """
-    lines = text.splitlines(keepends=True)
-    on_at = None
-    for index, line in enumerate(lines):
-        if re.match(r"^on:\s*(#.*)?$", line.rstrip("\n")):
-            on_at = index
-            break
-    if on_at is None:
-        return text
-    pr_at = None
-    block_end = len(lines)
-    for index in range(on_at + 1, len(lines)):
-        raw = lines[index].rstrip("\n")
-        if not raw.strip() or raw.lstrip().startswith("#"):
-            continue
-        if not raw.startswith(" "):
-            block_end = index
-            break
-        if re.match(r"^  pull_request:\s*(#.*)?$", raw):
-            pr_at = index
-            break
-    if pr_at is None:
-        return text
-    types_at = None
-    index = pr_at + 1
-    while index < block_end:
-        raw = lines[index].rstrip("\n")
-        if not raw.strip() or raw.lstrip().startswith("#"):
-            index += 1
-            continue
-        indent = len(raw) - len(raw.lstrip(" "))
-        if indent <= 2:
-            break
-        if indent == 4 and raw.strip().startswith("types:"):
-            types_at = index
-            break
-        index += 1
-    if types_at is None:
-        lines.insert(pr_at + 1, "    types: [opened, synchronize, reopened, labeled, unlabeled]\n")
-        return "".join(lines)
-    raw = lines[types_at].rstrip("\n")
-    flow = re.match(r"^(\s*types:\s*)\[(.*)\](\s*(#.*)?)?$", raw)
-    if flow:
-        items = [part.strip().strip("'\"") for part in flow.group(2).split(",") if part.strip()]
-        for name in PR_TYPES:
-            if name not in items:
-                items.append(name)
-        comment = flow.group(3) or ""
-        if comment and not comment.startswith(" ") and not comment.startswith("\t"):
-            comment = " " + comment
-        lines[types_at] = f"{flow.group(1)}[{', '.join(items)}]{comment}\n"
-        return "".join(lines)
-    key_indent = len(raw) - len(raw.lstrip(" "))
-    present = []
-    item_indent = None
-    last_item = types_at
-    index = types_at + 1
-    while index < len(lines):
-        item = lines[index].rstrip("\n")
-        if not item.strip() or item.lstrip().startswith("#"):
-            index += 1
-            continue
-        indent = len(item) - len(item.lstrip(" "))
-        if indent <= key_indent:
-            break
-        match = re.match(r"^\s*-\s+([^#]+?)\s*(#.*)?$", item)
-        if match:
-            present.append(match.group(1).strip().strip("'\""))
-            item_indent = indent
-            last_item = index
-        index += 1
-    if item_indent is None:
-        return text
-    for name in PR_TYPES:
-        if name not in present:
-            last_item += 1
-            lines.insert(last_item, f"{' ' * item_indent}- {name}\n")
-    return "".join(lines)
-
-
 def write_if_changed(path: Path, text: str) -> None:
     if path.is_file() and path.read_text() == text:
         return
@@ -386,16 +311,16 @@ def wire(root: Path) -> None:
     found = find_hygiene(root)
     if found is not None:
         path, lines, span = found
-        updated = ensure_pr_types("".join(update_job(lines, span)))
+        updated = "".join(update_job(lines, span))
         if not updated.endswith("\n"):
             updated += "\n"
         write_if_changed(path, updated)
         return
     path = root / ".github" / "workflows" / "hygiene.yml"
     if path.is_file():
-        write_if_changed(path, ensure_pr_types(append_hygiene_job(path.read_text())))
+        write_if_changed(path, append_hygiene_job(path.read_text()))
         return
-    write_if_changed(path, ensure_pr_types(new_workflow()))
+    write_if_changed(path, new_workflow())
 
 
 def missing_scripts(root: Path) -> list[str]:

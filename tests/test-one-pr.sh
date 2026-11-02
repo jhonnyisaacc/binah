@@ -13,7 +13,7 @@ write() {
 expect_fail() {
   local number=$1
   local needle=$2
-  if "$check" --prs "$tmp/prs.json" --number "$number" >/dev/null 2>"$tmp/err"; then
+  if (cd "$here" && "$check" --prs "$tmp/prs.json" --number "$number") >/dev/null 2>"$tmp/err"; then
     printf 'expected pull #%s to fail\n' "$number" >&2
     exit 1
   fi
@@ -24,9 +24,11 @@ expect_fail() {
   fi
 }
 
+here=.
+
 expect_pass() {
   local number=$1
-  if ! "$check" --prs "$tmp/prs.json" --number "$number" >/dev/null 2>"$tmp/err"; then
+  if ! (cd "$here" && "$check" --prs "$tmp/prs.json" --number "$number") >/dev/null 2>"$tmp/err"; then
     printf 'expected pull #%s to pass:\n' "$number" >&2
     cat "$tmp/err" >&2
     exit 1
@@ -43,40 +45,82 @@ write '[
   {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
 ]'
 expect_fail 1 'later pull request #2'
+expect_fail 1 'policy/backlog-recovery'
 
-write '[
-  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}]},
+fold='[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one"},
   {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
 ]'
-expect_fail 1 'later pull request #2'
 
-owner=$(sed -n 's/^name=//p' "$root/policy/author")
-write "$(cat <<EOF
-[
-  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}],"labelEvents":[{"event":"labeled","actor":"cursor[bot]","label":"backlog-recovery","createdAt":"2026-10-03T00:00:00Z"}]},
-  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
-]
-EOF
-)"
-expect_fail 1 'later pull request #2'
+commit_repo() {
+  git -C "$1" -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m "$2"
+}
 
-write "$(cat <<EOF
-[
-  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}],"labelEvents":[{"event":"labeled","actor":"${owner}","label":"backlog-recovery","createdAt":"2026-10-02T00:00:00Z"},{"event":"unlabeled","actor":"${owner}","label":"backlog-recovery","createdAt":"2026-10-03T00:00:00Z"},{"event":"labeled","actor":"cursor[bot]","label":"backlog-recovery","createdAt":"2026-10-04T00:00:00Z"}]},
-  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
-]
-EOF
-)"
-expect_fail 1 'later pull request #2'
+new_repo() {
+  local name=$1
+  local bare=$tmp/bare-$name
+  local repo=$tmp/work-$name
+  git init -q --bare "$bare"
+  git init -q "$repo"
+  git -C "$repo" remote add origin "$bare"
+  git -C "$repo" checkout -q -B main
+  git -C "$repo" -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q --allow-empty -m init
+  git -C "$repo" push -q -u origin main
+  git -C "$repo" fetch -q origin
+  printf '%s\n' "$repo"
+}
 
-write "$(cat <<EOF
-[
-  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"backlog-recovery"}],"labelEvents":[{"event":"labeled","actor":"${owner}","label":"backlog-recovery","createdAt":"2026-10-03T00:00:00Z"}]},
-  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
-]
-EOF
-)"
+# Listed on the base branch. The head copy drops the number and still passes.
+repo=$(new_repo listed)
+mkdir -p "$repo/policy"
+printf '# approved\n1 # bottom pull\n' >"$repo/policy/backlog-recovery"
+git -C "$repo" add policy/backlog-recovery
+commit_repo "$repo" list
+git -C "$repo" push -q origin main
+git -C "$repo" fetch -q origin
+git -C "$repo" checkout -q -b feat/one
+printf '# not on the base\n' >"$repo/policy/backlog-recovery"
+git -C "$repo" add policy/backlog-recovery
+commit_repo "$repo" drop
+write "$fold"
+here=$repo
 expect_pass 1
+
+# Present in the file, but not this pull.
+repo=$(new_repo unlisted)
+mkdir -p "$repo/policy"
+printf '# 1 is a comment, not a listing\n12\n' >"$repo/policy/backlog-recovery"
+git -C "$repo" add policy/backlog-recovery
+commit_repo "$repo" other
+git -C "$repo" push -q origin main
+git -C "$repo" fetch -q origin
+write "$fold"
+here=$repo
+expect_fail 1 'later pull request #2'
+
+# The number exists only on the pull's head.
+repo=$(new_repo head)
+mkdir -p "$repo/policy"
+printf '# none\n' >"$repo/policy/backlog-recovery"
+git -C "$repo" add policy/backlog-recovery
+commit_repo "$repo" empty
+git -C "$repo" push -q origin main
+git -C "$repo" fetch -q origin
+git -C "$repo" checkout -q -b feat/one
+printf '1\n' >"$repo/policy/backlog-recovery"
+git -C "$repo" add policy/backlog-recovery
+commit_repo "$repo" head-only
+write "$fold"
+here=$repo
+expect_fail 1 'merge-playbook.md section 10'
+
+# The base branch has no policy file.
+repo=$(new_repo missing)
+write "$fold"
+here=$repo
+expect_fail 1 'later pull request #2'
+
+here=.
 
 write '[
   {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","labels":[{"name":"other"}]},
@@ -119,7 +163,7 @@ expect_pass 2
 expect_pass 3
 expect_pass 4
 expect_pass 5
-expect_fail 6 'over the limit of 5'
+expect_fail 6 'pull #6 is the 6th open pull; the limit is 5'
 
 # createdAt order, not number order. The 6th and later fail.
 write '[
@@ -133,8 +177,8 @@ write '[
 ]'
 expect_pass 9
 expect_pass 3
-expect_fail 1 'over the limit of 5'
-expect_fail 2 'over the limit of 5'
+expect_fail 1 'pull #1 is the 6th open pull; the limit is 5'
+expect_fail 2 'pull #2 is the 7th open pull; the limit is 5'
 
 write '[
   {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"refactor/run-01"},

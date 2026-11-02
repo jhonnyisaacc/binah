@@ -15,6 +15,7 @@ Rule changes need Jhonny's approval and a changelog line.
 - `.githooks/`: branch-name check on push, and the commit-msg hook that drops a Cursor co-author trailer.
 
 ## Changelog
+- 2026-11-02: a recovery fold passes only when `policy/backlog-recovery` on the pull's base branch lists that pull. The label exemption was dropped because agents hold Jhonny's credentials. Adding a number there is Tier A.
 - 2026-10-27: `binah-install` wires the hygiene job: one pull request one job, the pull request body check, and a current-tree secret scan. History-scanning Gitleaks stays off until that scan passes and fixtures are allowlisted.
 - 2026-10-20: rules and merge playbook v4.6. Agent preflight, the branch pattern, pull request body sections, review before ready, keep-current, CI babysit, redo, and the Expo release-check template.
 - 2026-10-13: added setup/signing.md (per-actor keys; connector commits are unsigned); expanded cursor.md (cloud environments) and expo.md (EAS pipeline with decision table); security.md key separation and token scopes.

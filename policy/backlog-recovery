@@ -1,0 +1,6 @@
+# Pull numbers whose backlog-recovery fold may stay open, one number per line.
+# scripts/check-one-pr.sh reads this file from the pull's base branch
+# (git show origin/<base>:policy/backlog-recovery), never from the pull's head.
+# A missing file counts as not listed. Comments start with #.
+# Adding a number is Tier A (editing guardrail files) and needs Jhonny's approval.
+# A label does not grant this: agents hold Jhonny's credentials.

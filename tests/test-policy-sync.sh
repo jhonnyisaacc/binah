@@ -50,4 +50,19 @@ if ! grep -F -q 'fetch-depth: 0' "$root/rules.md"; then
   printf 'rules.md does not keep history scanning off\n' >&2
   exit 1
 fi
+python3 - "$root" <<'PY'
+import importlib.util
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("wire", root / "scripts/lib/wire-hygiene.py")
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+sentence = mod.ONE_PULL_SENTENCE
+rules = (root / "rules.md").read_text()
+if sentence not in rules:
+    sys.stderr.write("wire-hygiene one-pull sentence is not the rules.md sentence\n")
+    sys.exit(1)
+PY
 printf 'policy sync ok\n'

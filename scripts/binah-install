@@ -73,6 +73,9 @@ copy_file "$src/skills/agent-preflight/SKILL.md" "$target/.cursor/skills/agent-p
 if [[ ! -f $target/policy/secret-allowlist ]]; then
   copy_file "$src/policy/secret-allowlist" "$target/policy/secret-allowlist"
 fi
+if [[ ! -f $target/policy/backlog-recovery ]]; then
+  copy_file "$src/policy/backlog-recovery" "$target/policy/backlog-recovery"
+fi
 if [[ -f $src/scripts/sync-design-files.sh ]]; then
   copy_file "$src/scripts/sync-design-files.sh" "$target/scripts/sync-design-files.sh"
 fi

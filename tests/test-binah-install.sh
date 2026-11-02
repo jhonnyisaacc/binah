@@ -24,8 +24,8 @@ assert_wired() {
     cat "$wf" >&2
     exit 1
   fi
-  if ! grep -w -q opened "$wf" || ! grep -w -q synchronize "$wf" || ! grep -w -q reopened "$wf" || ! grep -w -q labeled "$wf" || ! grep -w -q unlabeled "$wf"; then
-    printf 'hygiene should re-run when a label is added or removed\n' >&2
+  if grep -w -q unlabeled "$wf" || grep -q 'issues: read' "$wf"; then
+    printf 'hygiene must not use label events\n' >&2
     cat "$wf" >&2
     exit 1
   fi
@@ -52,6 +52,10 @@ for script in $copied; do
     exit 1
   fi
 done
+if [[ ! -f $fresh/policy/backlog-recovery ]]; then
+  printf 'install did not copy policy/backlog-recovery\n' >&2
+  exit 1
+fi
 assert_wired "$fresh"
 if [[ $(grep -c '^  hygiene:' "$fresh/.github/workflows/hygiene.yml") -ne 1 ]]; then
   printf 'a new repo should get one hygiene job\n' >&2
@@ -85,6 +89,8 @@ fi
 existing=$tmp/existing
 mkdir -p "$existing/.github/workflows"
 git init -q "$existing"
+mkdir -p "$existing/policy"
+printf '99\n' >"$existing/policy/backlog-recovery"
 cat >"$existing/.github/workflows/ci.yml" <<'EOF'
 name: CI
 on:
@@ -119,6 +125,10 @@ if ! grep -q 'bun test' "$existing/.github/workflows/ci.yml"; then
 fi
 if ! grep -q 'echo other' "$existing/.github/workflows/ci.yml"; then
   printf 'install changed the other job\n' >&2
+  exit 1
+fi
+if [[ $(cat "$existing/policy/backlog-recovery") != '99' ]]; then
+  printf 'install replaced an existing policy/backlog-recovery\n' >&2
   exit 1
 fi
 if grep -F -q 'pull request body (planned)' "$existing/rules.md"; then
