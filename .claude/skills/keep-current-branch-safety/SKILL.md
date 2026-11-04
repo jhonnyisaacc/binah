@@ -83,7 +83,7 @@ Never lower a bound or remove a rule to get a pass.
 
 Covered: `scripts/keep-current.sh` (`protected_branch`, `should_delete_branch`, `read_open_branches`, and in `main` the PR list reads, the fetch, and the delete loop).
 
-Sync commit: `cbc0099`
+Sync commit: `dc54a60`
 
 Move the sync commit only after you have read the covered code and confirmed that `model.py` still describes it at the new commit. Use a commit on `main`, because branch commits disappear when pull requests squash-merge.
 
