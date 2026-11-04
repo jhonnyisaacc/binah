@@ -36,10 +36,11 @@ expect_fail bad-no-platform 'needs --platform android'
 expect_fail bad-version 'expo.version'
 expect_fail bad-version 'autoIncrement must be true'
 
-python3 - <<'PY'
+python3 - "$root" <<'PY'
 import importlib.util
+import sys
 from pathlib import Path
-path = Path("/workspace/templates/expo-release/check_expo_release.py")
+path = Path(sys.argv[1]) / "templates/expo-release/check_expo_release.py"
 spec = importlib.util.spec_from_file_location("check", path)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)

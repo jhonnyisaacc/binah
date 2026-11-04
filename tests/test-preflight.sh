@@ -36,7 +36,7 @@ fi
 seed "$tmp/repo"
 ssh-keygen -q -t ed25519 -N '' -f "$tmp/id" -C 'preflight test'
 export SSH_SIGNING_KEY_BASE64
-SSH_SIGNING_KEY_BASE64=$(base64 -w0 "$tmp/id")
+SSH_SIGNING_KEY_BASE64=$(base64 <"$tmp/id" | tr -d '\n')
 (cd "$tmp/repo" && bash scripts/agent-preflight.sh >/dev/null)
 email=$(git -C "$tmp/repo" config --local --get user.email)
 name=$(git -C "$tmp/repo" config --local --get user.name)
@@ -46,9 +46,8 @@ if [[ $email != '60485595+jhonnyisaacc@users.noreply.github.com' || $name != jho
   printf 'preflight config mismatch: %s <%s> sign=%s hooks=%s\n' "$name" "$email" "$sign" "$hooks" >&2
   exit 1
 fi
-mode=$(stat -c '%a' "$HOME/.ssh/agent_signing")
-if [[ $mode != 600 ]]; then
-  printf 'signing key mode is %s\n' "$mode" >&2
+if [[ -z $(find "$HOME/.ssh/agent_signing" -perm 600) ]]; then
+  printf 'signing key mode is not 600\n' >&2
   exit 1
 fi
 sum1=$(sha256sum "$HOME/.ssh/agent_signing" | awk '{print $1}')
