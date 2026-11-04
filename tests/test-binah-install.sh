@@ -37,6 +37,20 @@ assert_wired() {
     printf 'a new hygiene workflow should check out the current tree\n' >&2
     exit 1
   fi
+  if ! grep -q 'RUNNER_TEMP/binah-base' "$wf"; then
+    printf 'hygiene does not check the base out into a separate directory\n' >&2
+    exit 1
+  fi
+  for script in scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh; do
+    if ! grep -q "binah-base/$script" "$wf"; then
+      printf 'hygiene does not run %s from the base checkout\n' "$script" >&2
+      exit 1
+    fi
+  done
+  if ! grep -q 'GITHUB_WORKSPACE' "$wf"; then
+    printf 'the secret scan should read the pull tree\n' >&2
+    exit 1
+  fi
   if ! bash "$install" --check "$dest"; then
     printf 'binah-install --check should pass\n' >&2
     exit 1
@@ -212,13 +226,13 @@ jobs:
           fetch-depth: 0
       # BEGIN binah hygiene
       - name: branch name
-        run: bash scripts/check-branch-name.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh"
       - name: pull request body
-        run: bash scripts/check-pr-body.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh"
       - name: one pull request, one job
-        run: bash scripts/check-one-pr.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"
       - name: secret scan
-        run: bash scripts/check-secrets.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"
       # END binah hygiene
 EOF
 if bash "$install" --check "$history" >/dev/null 2>"$tmp/err"; then
@@ -247,13 +261,13 @@ jobs:
           fetch-depth: 1
       # BEGIN binah hygiene
       - name: branch name
-        run: bash scripts/check-branch-name.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh"
       - name: pull request body
-        run: bash scripts/check-pr-body.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh"
       - name: one pull request, one job
-        run: bash scripts/check-one-pr.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"
       - name: secret scan
-        run: bash scripts/check-secrets.sh
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"
       # END binah hygiene
   other:
     runs-on: ubuntu-latest
@@ -276,10 +290,10 @@ write_checkout() {
     printf 'name: CI\non:\n  pull_request:\njobs:\n  hygiene:\n    runs-on: ubuntu-latest\n    steps:\n'
     printf '%s\n' "$step"
     printf '      # BEGIN binah hygiene\n'
-    printf '      - name: branch name\n        run: bash scripts/check-branch-name.sh\n'
-    printf '      - name: pull request body\n        run: bash scripts/check-pr-body.sh\n'
-    printf '      - name: one pull request, one job\n        run: bash scripts/check-one-pr.sh\n'
-    printf '      - name: secret scan\n        run: bash scripts/check-secrets.sh\n'
+    printf '      - name: branch name\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh"\n'
+    printf '      - name: pull request body\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh"\n'
+    printf '      - name: one pull request, one job\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"\n'
+    printf '      - name: secret scan\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"\n'
     printf '      # END binah hygiene\n'
   } >"$dir/.github/workflows/ci.yml"
 }

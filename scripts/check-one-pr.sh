@@ -68,11 +68,11 @@ if [[ -z $prs ]]; then
   merged=$(mktemp)
   gh pr view "$number" --repo "$repo" \
     --json number,state,createdAt,baseRefName,headRefName,isDraft >"$view"
-  head_ref=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["headRefName"])' "$view")
+  head_ref=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["headRefName"])' "$view")
   gh api --paginate --slurp "repos/${repo}/pulls?state=open&per_page=100" >"$open"
   gh pr list --repo "$repo" --state merged --base "$head_ref" --limit 1000 \
     --json number,state,createdAt,baseRefName,headRefName,isDraft >"$merged"
-  python3 - "$view" "$open" "$merged" >"$prs" <<'PY'
+  python3 -I - "$view" "$open" "$merged" >"$prs" <<'PY'
 import json
 import sys
 
@@ -129,7 +129,7 @@ script_root=$(cd "$(dirname "$0")/.." && pwd)
 policy_file=$script_root/policy/integration-branches
 
 set +e
-python3 - "$prs" "$number" "$live" "${default_branch:-main}" "$policy_file" <<'PY'
+python3 -I - "$prs" "$number" "$live" "${default_branch:-main}" "$policy_file" <<'PY'
 import fnmatch
 import json
 import re

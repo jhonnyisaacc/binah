@@ -59,6 +59,21 @@ if ! grep -q 'secret in key.pem' "$tmp/err"; then
   exit 1
 fi
 
+# The allowlist is the one next to the script. A copy in the scanned tree does not count.
+other=$tmp/other
+mkdir -p "$other/policy"
+printf '%s\n' "$token" >"$other/secret.txt"
+printf 'secret.txt\n' >"$other/policy/secret-allowlist"
+if bash "$tmp/repo/scripts/check-secrets.sh" "$other" >/dev/null 2>"$tmp/err"; then
+  printf 'the scanned tree must not supply the allowlist\n' >&2
+  exit 1
+fi
+if ! grep -q 'secret in secret.txt' "$tmp/err"; then
+  printf 'named-tree error should name the file\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
 if grep -E -v '^#' "$check" | grep -E -q 'gitleaks|git log|fetch-depth'; then
   printf 'the scan must not run a history scan\n' >&2
   exit 1

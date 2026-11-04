@@ -2,16 +2,16 @@
 # Exit 0 when the branch name matches policy/branch-name.regex.
 set -euo pipefail
 
-root=$(git rev-parse --show-toplevel)
+script_root=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=lib/common.sh
-source "$root/scripts/lib/common.sh"
+source "$script_root/scripts/lib/common.sh"
 
 if [[ $# -ge 1 ]]; then
   name=$1
 else
   name=$(git symbolic-ref --short HEAD)
 fi
-regex_file=$root/policy/branch-name.regex
+regex_file=$script_root/policy/branch-name.regex
 
 if branch_name_allowed "$name" "$regex_file"; then
   exit 0
