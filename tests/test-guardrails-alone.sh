@@ -68,4 +68,52 @@ if ! grep -q 'scripts/lib/wire-hygiene.py' "$err"; then
   exit 1
 fi
 
+fail src/app.ts scripts/lib/common.sh src/app.ts
+
+kit=$(mktemp -d)
+bash "$root/scripts/binah-install" "$kit" >/dev/null
+installed=()
+while IFS= read -r path; do
+  installed+=("$path")
+done < <(cd "$kit" && find . -type f | sed 's#^\./##')
+rm -rf "$kit"
+pass "${installed[@]}" rules.md templates/expo-release/README.md
+
+bin=$(mktemp -d)
+cat >"$bin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "api repos/acme/app/pulls/7 --jq .changed_files") printf '%s\n' "$CHANGED" ;;
+  "api --paginate repos/acme/app/pulls/7/files?per_page=100 "*) printf '%b' "$ROWS" ;;
+  *) printf 'unexpected gh: %s\n' "$*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$bin/gh"
+live() {
+  CHANGED=$1 ROWS=$2 PATH="$bin:$PATH" "$check" --repo acme/app --number 7 >/dev/null 2>"$err"
+}
+if ! live 2 'src/a.ts\t\nsrc/b.ts\t\n'; then
+  printf 'a feature pull should pass:\n' >&2
+  cat "$err" >&2
+  exit 1
+fi
+if live 2 'src/a.ts\t\npolicy/author\t\n'; then
+  printf 'a live mixed pull should fail\n' >&2
+  exit 1
+fi
+if live 1 'src/renamed.ts\tpolicy/author\n'; then
+  printf 'moving a guardrail out to another path should fail\n' >&2
+  exit 1
+fi
+if live 3001 'src/a.ts\t\n'; then
+  printf 'an incomplete file list must fail, not pass\n' >&2
+  exit 1
+fi
+if ! grep -q 'lists 1 of 3001' "$err"; then
+  printf 'the failure should say the list is incomplete:\n' >&2
+  cat "$err" >&2
+  exit 1
+fi
+rm -rf "$bin"
+
 printf 'guardrails alone ok\n'

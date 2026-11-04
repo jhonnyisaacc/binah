@@ -30,7 +30,7 @@ if grep -E -q 'git rebase' "$root/scripts/keep-current.sh"; then
 fi
 
 tmp=$(mktemp -d)
-git init -q --bare "$tmp/bare"
+git init -q --bare -b main "$tmp/bare"
 git init -q "$tmp/work"
 git -C "$tmp/work" config user.email test@example.com
 git -C "$tmp/work" config user.name test
@@ -98,6 +98,36 @@ git -C "$tmp/work" add shared.txt main.txt
 git -C "$tmp/work" commit -q -m B
 git -C "$tmp/work" push -q origin main
 
+git -C "$tmp/work" switch -q -c feat/reused
+echo first >"$tmp/work/reused.txt"
+git -C "$tmp/work" add reused.txt
+git -C "$tmp/work" commit -q -m 'first use'
+git -C "$tmp/work" push -q -u origin feat/reused
+reused_merged=$(git -C "$tmp/work" rev-parse HEAD)
+echo second >"$tmp/work/reused.txt"
+git -C "$tmp/work" add reused.txt
+git -C "$tmp/work" commit -q -m 'not landed yet'
+git -C "$tmp/work" push -q origin feat/reused
+git -C "$tmp/work" switch -q main
+
+git -C "$tmp/work" branch feat/named
+git -C "$tmp/work" branch feat/unlisted
+git -C "$tmp/work" push -q origin feat/named feat/unlisted
+mkdir -p "$tmp/work/policy"
+printf '# feat/unlisted\nfeat/named\n' >"$tmp/work/policy/integration-branches"
+git -C "$tmp/work" add policy/integration-branches
+git -C "$tmp/work" commit -q -m 'name an integration branch'
+git -C "$tmp/work" push -q origin main
+
+tip() { git -C "$tmp/work" rev-parse "origin/$1"; }
+merged_rows="[{\"headRefName\":\"feat/old-merged\",\"headRefOid\":\"$(tip feat/old-merged)\"}"
+merged_rows+=",{\"headRefName\":\"refactor/run-01\",\"headRefOid\":\"$(tip refactor/run-01)\"}"
+merged_rows+=",{\"headRefName\":\"feat/parent\",\"headRefOid\":\"$(tip feat/parent)\"}"
+merged_rows+=",{\"headRefName\":\"feat/reused\",\"headRefOid\":\"$reused_merged\"}"
+merged_rows+=",{\"headRefName\":\"feat/behind\",\"headRefOid\":\"$(tip feat/behind)\"}"
+merged_rows+=",{\"headRefName\":\"feat/named\",\"headRefOid\":\"$(tip feat/named)\"}"
+merged_rows+=",{\"headRefName\":\"feat/unlisted\",\"headRefOid\":\"$(tip feat/unlisted)\"}]"
+
 cat >"$tmp/gh" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$tmp/log"
@@ -105,8 +135,8 @@ case "\$*" in
   "pr list --repo acme/app --state open --limit 200 --json number,headRefName,baseRefName")
     printf '%s\n' '[{"number":1,"headRefName":"feat/behind","baseRefName":"main"},{"number":2,"headRefName":"feat/conflict","baseRefName":"main"},{"number":3,"headRefName":"feat/landed","baseRefName":"main"},{"number":4,"headRefName":"feat/child","baseRefName":"feat/parent"}]'
     ;;
-  "pr list --repo acme/app --state merged --limit 200 --json headRefName")
-    printf '%s\n' '[{"headRefName":"feat/old-merged"},{"headRefName":"refactor/run-01"},{"headRefName":"feat/parent"}]'
+  "pr list --repo acme/app --state merged --limit 200 --json headRefName,headRefOid")
+    printf '%s\n' '$merged_rows'
     ;;
   "pr close 3 --repo acme/app --comment Already on main. Closing.")
     ;;
@@ -128,6 +158,10 @@ printf '%s\n' "$out" | grep -q 'close #3 feat/landed'
 printf '%s\n' "$out" | grep -q 'delete feat/old-merged'
 printf '%s\n' "$out" | grep -q 'keep refactor/run-01'
 printf '%s\n' "$out" | grep -q 'keep feat/parent'
+printf '%s\n' "$out" | grep -q 'keep feat/reused'
+printf '%s\n' "$out" | grep -q 'keep feat/behind'
+printf '%s\n' "$out" | grep -q 'keep feat/named'
+printf '%s\n' "$out" | grep -q 'delete feat/unlisted'
 git --git-dir="$tmp/bare" fetch "$tmp/bare" >/dev/null 2>&1 || true
 subjects=$(git --git-dir="$tmp/bare" log --format=%s feat/behind)
 if ! printf '%s\n' "$subjects" | grep -q '^Merge '; then
@@ -150,6 +184,13 @@ if git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/old-merge
 fi
 git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/refactor/run-01
 git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/parent
+git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/reused
+git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/behind
+git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/named
+if git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/unlisted; then
+  printf 'a branch named only in a comment was kept\n' >&2
+  exit 1
+fi
 if ! grep -q 'Not rebasing' "$tmp/log"; then
   printf 'conflict comment missing\n' >&2
   cat "$tmp/log" >&2

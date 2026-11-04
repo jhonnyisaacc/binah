@@ -84,5 +84,20 @@ if ! grep -q 'does not match' "$tmp/err"; then
   exit 1
 fi
 
+# The regex is the one next to the script, not the git toplevel of the cwd.
+base=$tmp/base
+mkdir -p "$base/scripts/lib" "$base/policy" "$tmp/head"
+cp "$root/scripts/check-branch-name.sh" "$base/scripts/"
+cp "$root/scripts/lib/common.sh" "$base/scripts/lib/"
+cp "$root/policy/branch-name.regex" "$base/policy/"
+printf '.*\n' >"$tmp/head/policy-would-allow-anything"
+git init -q "$tmp/head"
+mkdir -p "$tmp/head/policy"
+printf '.*\n' >"$tmp/head/policy/branch-name.regex"
+if (cd "$tmp/head" && bash "$base/scripts/check-branch-name.sh" cursor/bad) >/dev/null 2>"$tmp/err"; then
+  printf 'branch check used the head regex instead of the script tree\n' >&2
+  exit 1
+fi
+
 rm -rf "$tmp"
 printf 'branch-name ok\n'
