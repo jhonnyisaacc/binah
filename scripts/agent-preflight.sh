@@ -17,7 +17,10 @@ if [[ ! -x $root/.githooks/commit-msg ]]; then
   exit 1
 fi
 
-mapfile -t author < <(read_author_file "$author_file")
+author=()
+while IFS= read -r line || [[ -n $line ]]; do
+  author+=("$line")
+done < <(read_author_file "$author_file")
 name=${author[0]}
 email=${author[1]}
 
