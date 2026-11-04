@@ -98,8 +98,8 @@ if bash "$install" --check "$sentence" >/dev/null 2>"$tmp/err"; then
   printf 'a template sentence in the workflow should fail\n' >&2
   exit 1
 fi
-if ! grep -q 'check-pr-body.sh' "$tmp/err"; then
-  printf 'missing-script error should name check-pr-body.sh\n' >&2
+if ! grep -q 'no binah block' "$tmp/err"; then
+  printf 'a workflow without the block should say so\n' >&2
   cat "$tmp/err" >&2
   exit 1
 fi
@@ -211,6 +211,19 @@ bash "$root/scripts/install-policy-kit.sh" "$caller" >/dev/null
 assert_wired "$caller"
 
 # fetch-depth: 0 on the hygiene checkout fails even when it sits outside the marker block.
+block_kit=$tmp/block-kit
+mkdir -p "$block_kit"
+bash "$install" "$block_kit" >/dev/null
+sed -n '/# BEGIN binah hygiene/,/# END binah hygiene/p' "$block_kit/.github/workflows/hygiene.yml" >"$tmp/block"
+fill_block() {
+  python3 - "$1" "$tmp/block" <<'PY'
+import re, sys
+text = open(sys.argv[1]).read()
+block = open(sys.argv[2]).read()
+open(sys.argv[1], "w").write(re.sub(r" *# BEGIN binah hygiene\n *# END binah hygiene\n", lambda _: block, text))
+PY
+}
+
 history=$tmp/history
 mkdir -p "$history/.github/workflows"
 cat >"$history/.github/workflows/ci.yml" <<'EOF'
@@ -225,18 +238,9 @@ jobs:
         with:
           fetch-depth: 0
       # BEGIN binah hygiene
-      - name: branch name
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh"
-      - name: pull request body
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh"
-      - name: one pull request, one job
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"
-      - name: secret scan
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"
-      - name: guardrail changes ride alone
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-guardrails-alone.sh"
       # END binah hygiene
 EOF
+fill_block "$history/.github/workflows/ci.yml"
 if bash "$install" --check "$history" >/dev/null 2>"$tmp/err"; then
   printf 'fetch-depth: 0 on the hygiene checkout should fail\n' >&2
   exit 1
@@ -262,16 +266,6 @@ jobs:
         with:
           fetch-depth: 1
       # BEGIN binah hygiene
-      - name: branch name
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh"
-      - name: pull request body
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh"
-      - name: one pull request, one job
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"
-      - name: secret scan
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"
-      - name: guardrail changes ride alone
-        run: bash "$RUNNER_TEMP/binah-base/scripts/check-guardrails-alone.sh"
       # END binah hygiene
   other:
     runs-on: ubuntu-latest
@@ -280,6 +274,7 @@ jobs:
         with:
           fetch-depth: 0
 EOF
+fill_block "$shallow/.github/workflows/ci.yml"
 if ! bash "$install" --check "$shallow" >/dev/null 2>"$tmp/err"; then
   printf 'fetch-depth: 0 outside the hygiene job should not fail:\n' >&2
   cat "$tmp/err" >&2
@@ -293,13 +288,7 @@ write_checkout() {
   {
     printf 'name: CI\non:\n  pull_request:\njobs:\n  hygiene:\n    runs-on: ubuntu-latest\n    steps:\n'
     printf '%s\n' "$step"
-    printf '      # BEGIN binah hygiene\n'
-    printf '      - name: branch name\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh"\n'
-    printf '      - name: pull request body\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh"\n'
-    printf '      - name: one pull request, one job\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"\n'
-    printf '      - name: secret scan\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"\n'
-    printf '      - name: guardrail changes ride alone\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-guardrails-alone.sh"\n'
-    printf '      # END binah hygiene\n'
+    cat "$tmp/block"
   } >"$dir/.github/workflows/ci.yml"
 }
 
@@ -326,7 +315,7 @@ for step in \
   $'      - uses: actions/checkout@v4\n        with:\n          # fetch-depth: 0 was too slow\n          fetch-depth: 1' \
   $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 1 # not fetch-depth: 0' \
   $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 10' \
-  $'      - name: notes about actions/checkout\n        run: echo "fetch-depth: 0"' \
+  $'      - uses: actions/checkout@v4\n      - name: notes about actions/checkout\n        run: echo "fetch-depth: 0"' \
   $'      # uses: actions/checkout@v3 with fetch-depth: 0\n      - uses: actions/checkout@v4'; do
   case_number=$((case_number + 1))
   dir=$tmp/depth-ok-$case_number

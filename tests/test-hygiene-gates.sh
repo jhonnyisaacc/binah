@@ -177,5 +177,43 @@ if bash "$install" --check "$commented" >/dev/null 2>"$tmp/err"; then
   exit 1
 fi
 
+expect_check_fails() {
+  local name=$1 needle=$2 expr=$3
+  local dir=$tmp/check-$name
+  mkdir -p "$dir/.github/workflows"
+  python3 -c "$expr" "$good_workflow" "$dir/.github/workflows/hygiene.yml"
+  if cmp -s "$good_workflow" "$dir/.github/workflows/hygiene.yml"; then
+    printf 'test edit changed nothing: %s\n' "$name" >&2
+    exit 1
+  fi
+  if bash "$install" --check "$dir" >/dev/null 2>"$tmp/err"; then
+    printf '%s\n' "--check should fail: $name" >&2
+    exit 1
+  fi
+  if ! grep -q -- "$needle" "$tmp/err"; then
+    printf '%s\n' "--check should mention $needle for $name:" >&2
+    cat "$tmp/err" >&2
+    exit 1
+  fi
+}
+
+replace_once() {
+  printf 'import sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(t.replace(%s,%s,1))' "$1" "$2"
+}
+
+kit=$tmp/good-kit
+mkdir -p "$kit"
+bash "$install" "$kit" >/dev/null
+good_workflow=$kit/.github/workflows/hygiene.yml
+bash "$install" --check "$kit" >/dev/null
+gate='bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"'
+expect_check_fails echoed 'differs' "$(replace_once "'$gate'" "'echo $gate'")"
+expect_check_fails step-soft 'differs' "$(replace_once "'- name: secret scan\n'" "'- name: secret scan\n        continue-on-error: true\n'")"
+expect_check_fails no-block 'no binah block' 'import re,sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(re.sub(r" *# BEGIN binah.*# END binah hygiene\n","      - run: echo hi\n",t,flags=re.S))'
+expect_check_fails job-off 'job-level if' "$(replace_once "'    runs-on: ubuntu-latest\n'" "'    if: false\n    runs-on: ubuntu-latest\n'")"
+expect_check_fails job-soft 'continue-on-error' "$(replace_once "'    runs-on: ubuntu-latest\n'" "'    continue-on-error: true\n    runs-on: ubuntu-latest\n'")"
+expect_check_fails no-trigger 'pull_request' "$(replace_once "'  pull_request:\n'" "''")"
+expect_check_fails no-checkout 'checkout' 'import re,sys; t=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(re.sub(r"      - uses: actions/checkout@v4\n        with:\n(          #.*\n)*          fetch-depth: 1\n","",t))'
+
 rm -rf "$tmp"
 printf 'hygiene gates ok\n'
