@@ -46,9 +46,8 @@ if [[ $email != '60485595+jhonnyisaacc@users.noreply.github.com' || $name != jho
   printf 'preflight config mismatch: %s <%s> sign=%s hooks=%s\n' "$name" "$email" "$sign" "$hooks" >&2
   exit 1
 fi
-mode=$(stat -c '%a' "$HOME/.ssh/agent_signing")
-if [[ $mode != 600 ]]; then
-  printf 'signing key mode is %s\n' "$mode" >&2
+if [[ -z $(find "$HOME/.ssh/agent_signing" -perm 600) ]]; then
+  printf 'signing key mode is not 600\n' >&2
   exit 1
 fi
 sum1=$(sha256sum "$HOME/.ssh/agent_signing" | awk '{print $1}')
