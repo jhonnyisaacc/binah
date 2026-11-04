@@ -39,4 +39,4 @@ Before editing UI, run `bash scripts/sync-design-files.sh`. It checks out `*.pen
 
 ## What Refa copies into each repository
 
-`scripts/install-policy-kit.sh <repo>` copies the policy files, the hooks, this skill, the pull request template, and the preflight script. It then updates `.cursor/environment.json`. For a repository with an Expo app, pass `--mobile` so the Expo release check is copied too.
+`scripts/binah-install <repo>` is the install command. It copies the policy files, the hooks, this skill, the pull request template, the preflight script, and the hygiene checks, wires those checks into the repo's `hygiene` job, and then runs the kit. `scripts/install-policy-kit.sh` calls it. For a repository with an Expo app, pass `--mobile` so the Expo release check is copied too.
