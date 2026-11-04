@@ -21,7 +21,7 @@ ONE_PULL_SENTENCE = (
     "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in `policy/backlog-recovery`. "
     "The integration pull request (`refactor/run-*`) is where those merges land, so it is not that failure. "
     "A fold passes only when `policy/backlog-recovery` on the default branch lists this pull's number. "
-    "The check reads that file with `git show` of `origin/<base>:policy/backlog-recovery` and never the pull's head. "
+    "The check reads that file with `git show` of `origin/<default>:policy/backlog-recovery` and never the pull's head. "
     "A missing file or a failed read counts as not listed. "
     "Adding a number to `policy/backlog-recovery` is Tier A (editing guardrail files) and needs Jhonny's approval. "
     "The label approach was dropped because agents hold Jhonny's credentials. "
