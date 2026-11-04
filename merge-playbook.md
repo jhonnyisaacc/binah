@@ -1,6 +1,6 @@
 # Merge playbook
 
-Version: 4.7 (matches rules.md).
+Version: 4.8 (matches rules.md).
 
 PR state follows rules.md. Open a PR as a draft while it is in development, so preview and deploy workflows do not run on every push. Mark it ready when it is ready for manual testing. pstack says to open every PR ready. In a repo governed by rules.md, rules.md wins. Until a repo has the auto-merge setup, the agent that owns a PR merges it itself (`gh pr merge <n> --squash`) once it is ready, CI is green, `guard-paths` passes, and every Bugbot thread has a decision (a fix commit or a won't-fix reason) and is resolved. While the pull request is still a draft, and before it is marked ready, the agent arranges a `bugbot run` comment. Bugbot ignores agent accounts, so `bugbot-trigger.yml` or Refa posts it as Jhonny. If no finished Bugbot check appears within 15 minutes, the agent writes one pstack review pass as a comment that starts a line with `Review pass:`, then marks the pull request ready. Tier A PRs wait for Jhonny's approval label. Where this file says "auto-merge", read "the owning agent merges" until the setup exists.
 
@@ -73,7 +73,7 @@ gh pr create --draft --base <run> --title "<title>" --body-file <body>
   | sort -rn
   ```
   Each line is one chain, deepest first: depth, then the chain from the integration branch up to its tip.
-- `scripts/check-one-pr.sh` runs on every pull request. It fails when this PR's depth is over 2 (`stack depth 3 is over the limit of 2`), this pull is the 6th or later open pull (`pull #N is the 6th open pull; the limit is 5`), or a later pull request has been merged into this pull while it is still open. Merges into an open `refactor/run-*` integration pull request are the run's normal merges, and the check allows them. A fold of a later pull into this one passes only when `policy/backlog-recovery` on this pull's base branch lists this pull's number. The check reads `origin/<base>:policy/backlog-recovery` and never the pull's head. A missing file or a failed read counts as not listed. Adding a number is Tier A (editing guardrail files) and needs Jhonny's approval. The label approach was dropped because agents hold Jhonny's credentials. The failure says to redo per section 10, or ask Jhonny to list the pull in `policy/backlog-recovery`.
+- `scripts/check-one-pr.sh` runs on every pull request. It fails when this PR's depth is over 2 (`stack depth 3 is over the limit of 2`), this pull is the 6th or later open pull (`pull #N is the 6th open pull; the limit is 5`), or a later pull request has been merged into this pull while it is still open. Merges into an open `refactor/run-*` integration pull request are the run's normal merges, and the check allows them. A fold of a later pull into this one passes only when `policy/backlog-recovery` on the default branch lists this pull's number. The check reads `origin/<base>:policy/backlog-recovery` and never the pull's head. A missing file or a failed read counts as not listed. Adding a number is Tier A (editing guardrail files) and needs Jhonny's approval. The label approach was dropped because agents hold Jhonny's credentials. The failure says to redo per section 10, or ask Jhonny to list the pull in `policy/backlog-recovery`.
 
 ## 4. After a parent merges: retarget and restack
 Daily keep-current is a different operation. `scripts/keep-current.sh` merges the pull request's base into its head and never rebases, so signatures stay. This section replays only the child's own commits after a parent squash, then signs them again.
@@ -120,7 +120,7 @@ gh pr merge --auto --squash
 The revert PR opens ready. It is a one-step fix, not a development loop, so it does not stay a draft while someone is still writing the change. A later push to that ready PR does deploy a preview. Green checks are the proof.
 
 ## 8. Backlog recovery
-For a run that ended with many open, stacked PRs. Nothing new starts on the repo until this is done. Folding children into the stack's bottom pull passes `scripts/check-one-pr.sh` only when `policy/backlog-recovery` on that pull's base branch lists the bottom pull's number. Adding a number is Tier A (editing guardrail files) and needs Jhonny's approval. A label does not work: agents hold Jhonny's credentials, so a label event cannot prove Jhonny applied it.
+For a run that ended with many open, stacked PRs. Nothing new starts on the repo until this is done. Folding children into the stack's bottom pull passes `scripts/check-one-pr.sh` only when `policy/backlog-recovery` on the default branch lists the bottom pull's number. Adding a number is Tier A (editing guardrail files) and needs Jhonny's approval. A label does not work: agents hold Jhonny's credentials, so a label event cannot prove Jhonny applied it.
 1. Freeze. No new PRs. Turn off any running agents for the repo.
 2. Map. Run the chain map from section 3 against the branch the PRs actually target. Also list PRs not in any chain:
    ```

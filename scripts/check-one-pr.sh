@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # One pull request, one job.
 # Fails when a later pull request has been merged into a pull that is still
-# open, unless policy/backlog-recovery on the pull's base branch lists this
-# pull. The check reads origin/<base>:policy/backlog-recovery and never the
-# pull's head. A missing file or a failed read counts as not listed.
+# open, unless policy/backlog-recovery on the default branch lists this pull.
+# The check reads origin/<default>:policy/backlog-recovery, never the pull's
+# head or a base the pull chose. A missing file or a failed read counts as not
+# listed.
 # Adding a number is Tier A. The label approach was dropped because agents
 # hold Jhonny's credentials. Keep-current and restack are not pull requests
 # and do not trip this.
@@ -14,13 +15,14 @@
 set -euo pipefail
 
 usage() {
-  printf 'usage: check-one-pr.sh (--prs <file> | --repo <owner/name>) --number <n>\n' >&2
+  printf 'usage: check-one-pr.sh (--prs <file> | --repo <owner/name>) --number <n> [--default-branch <name>]\n' >&2
   exit 2
 }
 
 prs=
 repo=
 number=
+default_branch=
 while [[ $# -gt 0 ]]; do
   case $1 in
     --prs)
@@ -33,6 +35,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --number)
       number=$2
+      shift
+      ;;
+    --default-branch)
+      default_branch=$2
       shift
       ;;
     *)
@@ -57,10 +63,13 @@ if [[ -z $prs ]]; then
   live=1
   gh pr list --repo "$repo" --state all --limit 200 \
     --json number,state,createdAt,baseRefName,headRefName,isDraft >"$prs"
+  if [[ -z $default_branch ]]; then
+    default_branch=$(gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name)
+  fi
 fi
 
 set +e
-python3 - "$prs" "$number" "$live" <<'PY'
+python3 - "$prs" "$number" "$live" "${default_branch:-main}" <<'PY'
 import json
 import re
 import subprocess
@@ -76,7 +85,7 @@ FOLD_NEXT = (
     "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in policy/backlog-recovery."
 )
 
-path, number, live = sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1"
+path, number, live, default_branch = sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1", sys.argv[4]
 try:
     data = json.load(open(path))
 except json.JSONDecodeError:
@@ -119,8 +128,14 @@ def show_recovery(base):
 
     proc = show()
     if proc.returncode != 0 and live:
+        shallow = subprocess.run(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        depth = ["--depth", "1"] if shallow == "true" else []
         subprocess.run(
-            ["git", "fetch", "--depth", "1", "origin", base],
+            ["git", "fetch", *depth, "origin", base],
             capture_output=True,
             text=True,
         )
@@ -156,7 +171,7 @@ def integration(name):
 by_head = {pr["head"]: pr for pr in prs if pr["state"] == "OPEN"}
 messages = []
 
-recovery_ok = listed(show_recovery(current["base"]), current["number"])
+recovery_ok = listed(show_recovery(default_branch), current["number"])
 if not integration(current["head"]) and not recovery_ok:
     for other in prs:
         if other["number"] == current["number"]:
