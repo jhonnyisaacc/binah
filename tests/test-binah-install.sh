@@ -5,8 +5,8 @@ root=$(git rev-parse --show-toplevel)
 install=$root/scripts/binah-install
 tmp=$(mktemp -d)
 
-copied='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh'
-required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh'
+copied='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh'
+required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh'
 
 assert_wired() {
   local dest=$1

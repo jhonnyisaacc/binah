@@ -66,6 +66,7 @@ require_copy scripts/check-branch-name.sh
 require_copy scripts/check-pr-body.sh
 require_copy scripts/check-one-pr.sh
 require_copy scripts/check-secrets.sh
+require_copy scripts/check-guardrails-alone.sh
 require_copy .githooks/commit-msg
 require_copy .githooks/pre-push
 copy_file "$src/skills/agent-preflight/SKILL.md" "$target/.cursor/skills/agent-preflight/SKILL.md"

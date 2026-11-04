@@ -12,6 +12,7 @@ REQUIRED = (
     "scripts/check-pr-body.sh",
     "scripts/check-one-pr.sh",
     "scripts/check-secrets.sh",
+    "scripts/check-guardrails-alone.sh",
 )
 
 # This sentence is the Merging rule in rules.md. tests/test-policy-sync.sh
@@ -77,6 +78,20 @@ def steps_block(indent: str) -> str:
         + "'bash scripts/check-one-pr.sh --repo \"${{ github.repository }}\" --number \"${{ github.event.pull_request.number }}\"'",
         f"{indent}- name: secret scan",
         f"{key}run: bash scripts/check-secrets.sh",
+        f"{indent}- name: guardrail changes ride alone",
+        f"{key}if: github.event_name == 'pull_request'",
+        f"{key}env:",
+        f"{nested}GH_TOKEN: " + "'${{ github.token }}'",
+        f"{key}run: |",
+        nested + 'number="${{ github.event.pull_request.number }}"',
+        nested + 'list="${RUNNER_TEMP}/pr-files.txt"',
+        nested + "gh pr view \"$number\" --json files --jq '.files[].path' >\"$list\"",
+        nested + "args=()",
+        nested + 'while IFS= read -r path || [ -n "$path" ]; do',
+        nested + '  [ -z "$path" ] && continue',
+        nested + '  args+=("$path")',
+        nested + 'done <"$list"',
+        nested + 'bash scripts/check-guardrails-alone.sh "${args[@]}"',
         f"{indent}# END binah hygiene",
     ]
     return "\n".join(lines) + "\n"
