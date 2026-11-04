@@ -13,15 +13,18 @@ import check
 import probe
 
 BR, DR = "between-runs", "during-run"
-BASELINE = {(DR, "open-head-kept"), (DR, "open-base-kept"), (DR, "unlanded-work-kept")}
+BASELINE = {(DR, "open-base-kept")}
 
 NO_OPEN_CHECK = [('for base in $open_bases; do', 'for base in ; do')]
-NO_HEAD_LIST = [("jq -r '.[].baseRefName, .[].headRefName')", "jq -r '.[].baseRefName')")]
-NO_TIP_CHECK = [(
-    '[[ $(git -C "$workdir" rev-parse "origin/${branch}" 2>/dev/null || true) == "$merged_oid" ]]; then',
-    'true; then',
-)]
-NO_PROTECTION = [('if protected_branch "$branch"; then', 'if false; then')]
+NO_HEAD_LIST = [("jq -r '.[].baseRefName, .[].headRefName'", "jq -r '.[].baseRefName'")]
+LEASE = '--force-with-lease="refs/heads/${branch}:${merged_oid}" '
+NO_LEASE = [(LEASE, "")]
+NO_TIP_NO_LEASE = [(LEASE, ""), ('[[ $tip != "$merged_oid" ]] || protected_branch', 'protected_branch')]
+NO_REREAD = [('! open_now=$(read_open_branches "$repo") || ', 'open_now=$(printf "%s" "$open" | jq -r ".[].baseRefName, .[].headRefName"); ')]
+NO_PROTECTION = [
+    ('if protected_branch "$branch"; then', 'if false; then'),
+    ('[[ $tip != "$merged_oid" ]] || protected_branch "$branch"', '[[ $tip != "$merged_oid" ]]'),
+]
 READ_ORDER = [(
     '''  open=$(gh pr list --repo "$repo" --state open --limit 200 --json number,headRefName,baseRefName)
   merged=$(gh pr list --repo "$repo" --state merged --limit 200 --json headRefName,headRefOid)
@@ -31,15 +34,18 @@ READ_ORDER = [(
 ''',
 )]
 
+OPEN_HEAD = (DR, "open-head-kept")
 VARIANTS = [
     ("real script", [], BASELINE),
     ("open-list check removed", NO_OPEN_CHECK,
-     BASELINE | {(BR, "open-base-kept"), (BR, "open-head-kept")}),
-    ("open heads not read", NO_HEAD_LIST, BASELINE | {(BR, "open-head-kept")}),
-    ("tip check removed", NO_TIP_CHECK, BASELINE | {(BR, "unlanded-work-kept")}),
+     BASELINE | {OPEN_HEAD, (BR, "open-base-kept"), (BR, "open-head-kept")}),
+    ("open heads not read", NO_HEAD_LIST, BASELINE | {OPEN_HEAD, (BR, "open-head-kept")}),
+    ("delete lease removed", NO_LEASE, BASELINE | {OPEN_HEAD, (DR, "unlanded-work-kept")}),
+    ("tip check and lease removed", NO_TIP_NO_LEASE,
+     BASELINE | {OPEN_HEAD, (BR, "unlanded-work-kept"), (DR, "unlanded-work-kept")}),
     ("branch protection removed", NO_PROTECTION,
-     {(BR, "protected-branch-kept"), (DR, "protected-branch-kept"),
-      (DR, "open-base-kept"), (DR, "unlanded-work-kept")}),
+     {(BR, "protected-branch-kept"), (DR, "protected-branch-kept"), (DR, "open-base-kept")}),
+    ("no reread before delete", NO_REREAD, None),
     ("merged list read first", READ_ORDER, None),
 ]
 

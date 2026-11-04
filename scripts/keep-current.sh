@@ -25,6 +25,11 @@ protected_branch() {
   return 1
 }
 
+read_open_branches() {
+  gh pr list --repo "$1" --state open --limit 200 --json number,headRefName,baseRefName |
+    jq -r '.[].baseRefName, .[].headRefName'
+}
+
 read_integration_names() {
   local workdir=$1 default_ref
   default_ref=$(git -C "$workdir" ls-remote --symref origin HEAD | awk '$1 == "ref:" { print $2 }')
@@ -85,9 +90,6 @@ main() {
   git -C "$workdir" fetch --quiet origin
   integration_names=$(read_integration_names "$workdir")
 
-  local open_bases
-  open_bases=$(printf '%s' "$open" | jq -r '.[].baseRefName, .[].headRefName')
-
   local number head base ancestor same action files
   while IFS=$'\t' read -r number head base; do
     [[ -n $number ]] || continue
@@ -125,18 +127,23 @@ main() {
     fi
   done < <(printf '%s' "$open" | jq -r '.[] | "\(.number)\t\(.headRefName)\t\(.baseRefName)"')
 
-  local branch merged_oid
+  local branch merged_oid tip open_now
   while IFS=$'\t' read -r branch merged_oid; do
     [[ -n $branch ]] || continue
-    if should_delete_branch "$branch" "$open_bases" &&
-      [[ $(git -C "$workdir" rev-parse "origin/${branch}" 2>/dev/null || true) == "$merged_oid" ]]; then
-      printf 'delete %s\n' "$branch"
-      if [[ $apply -eq 1 ]]; then
-        git -C "$workdir" push --quiet origin --delete "$branch" || true
-      fi
-    else
+    tip=$(git -C "$workdir" rev-parse "origin/${branch}" 2>/dev/null || true)
+    if [[ $tip != "$merged_oid" ]] || protected_branch "$branch"; then
       printf 'keep %s\n' "$branch"
+      continue
     fi
+    if ! open_now=$(read_open_branches "$repo") || ! should_delete_branch "$branch" "$open_now"; then
+      printf 'keep %s\n' "$branch"
+      continue
+    fi
+    if [[ $apply -eq 1 ]] && ! git -C "$workdir" push --quiet --force-with-lease="refs/heads/${branch}:${merged_oid}" origin --delete "refs/heads/${branch}"; then
+      printf 'keep %s\n' "$branch"
+      continue
+    fi
+    printf 'delete %s\n' "$branch"
   done < <(printf '%s' "$merged" | jq -r '.[] | "\(.headRefName)\t\(.headRefOid)"')
 }
 

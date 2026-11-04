@@ -119,6 +119,10 @@ git -C "$tmp/work" add policy/integration-branches
 git -C "$tmp/work" commit -q -m 'name an integration branch'
 git -C "$tmp/work" push -q origin main
 
+git -C "$tmp/work" branch feat/racy-tip
+git -C "$tmp/work" branch feat/racy-pr
+git -C "$tmp/work" push -q origin feat/racy-tip feat/racy-pr
+
 tip() { git -C "$tmp/work" rev-parse "origin/$1"; }
 merged_rows="[{\"headRefName\":\"feat/old-merged\",\"headRefOid\":\"$(tip feat/old-merged)\"}"
 merged_rows+=",{\"headRefName\":\"refactor/run-01\",\"headRefOid\":\"$(tip refactor/run-01)\"}"
@@ -126,14 +130,27 @@ merged_rows+=",{\"headRefName\":\"feat/parent\",\"headRefOid\":\"$(tip feat/pare
 merged_rows+=",{\"headRefName\":\"feat/reused\",\"headRefOid\":\"$reused_merged\"}"
 merged_rows+=",{\"headRefName\":\"feat/behind\",\"headRefOid\":\"$(tip feat/behind)\"}"
 merged_rows+=",{\"headRefName\":\"feat/named\",\"headRefOid\":\"$(tip feat/named)\"}"
-merged_rows+=",{\"headRefName\":\"feat/unlisted\",\"headRefOid\":\"$(tip feat/unlisted)\"}]"
+merged_rows+=",{\"headRefName\":\"feat/unlisted\",\"headRefOid\":\"$(tip feat/unlisted)\"}"
+merged_rows+=",{\"headRefName\":\"feat/racy-tip\",\"headRefOid\":\"$(tip feat/racy-tip)\"}"
+merged_rows+=",{\"headRefName\":\"feat/racy-pr\",\"headRefOid\":\"$(tip feat/racy-pr)\"}]"
 
 cat >"$tmp/gh" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$tmp/log"
 case "\$*" in
   "pr list --repo acme/app --state open --limit 200 --json number,headRefName,baseRefName")
-    printf '%s\n' '[{"number":1,"headRefName":"feat/behind","baseRefName":"main"},{"number":2,"headRefName":"feat/conflict","baseRefName":"main"},{"number":3,"headRefName":"feat/landed","baseRefName":"main"},{"number":4,"headRefName":"feat/child","baseRefName":"feat/parent"}]'
+    if [[ -e "$tmp/first-read-done" ]]; then
+      if [[ ! -e "$tmp/raced" ]]; then
+        touch "$tmp/raced"
+        tree=\$(git --git-dir="$tmp/bare" rev-parse 'feat/racy-tip^{tree}')
+        later=\$(git --git-dir="$tmp/bare" -c user.name=t -c user.email=t@e.com commit-tree "\$tree" -p feat/racy-tip -m 'pushed during the run')
+        git --git-dir="$tmp/bare" update-ref refs/heads/feat/racy-tip "\$later"
+      fi
+      printf '%s\n' '[{"number":1,"headRefName":"feat/behind","baseRefName":"main"},{"number":2,"headRefName":"feat/conflict","baseRefName":"main"},{"number":3,"headRefName":"feat/landed","baseRefName":"main"},{"number":4,"headRefName":"feat/child","baseRefName":"feat/parent"},{"number":9,"headRefName":"feat/racy-pr","baseRefName":"main"}]'
+    else
+      touch "$tmp/first-read-done"
+      printf '%s\n' '[{"number":1,"headRefName":"feat/behind","baseRefName":"main"},{"number":2,"headRefName":"feat/conflict","baseRefName":"main"},{"number":3,"headRefName":"feat/landed","baseRefName":"main"},{"number":4,"headRefName":"feat/child","baseRefName":"feat/parent"}]'
+    fi
     ;;
   "pr list --repo acme/app --state merged --limit 200 --json headRefName,headRefOid")
     printf '%s\n' '$merged_rows'
@@ -162,6 +179,8 @@ printf '%s\n' "$out" | grep -q 'keep feat/reused'
 printf '%s\n' "$out" | grep -q 'keep feat/behind'
 printf '%s\n' "$out" | grep -q 'keep feat/named'
 printf '%s\n' "$out" | grep -q 'delete feat/unlisted'
+printf '%s\n' "$out" | grep -q 'keep feat/racy-tip'
+printf '%s\n' "$out" | grep -q 'keep feat/racy-pr'
 git --git-dir="$tmp/bare" fetch "$tmp/bare" >/dev/null 2>&1 || true
 subjects=$(git --git-dir="$tmp/bare" log --format=%s feat/behind)
 if ! printf '%s\n' "$subjects" | grep -q '^Merge '; then
@@ -187,6 +206,11 @@ git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/parent
 git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/reused
 git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/behind
 git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/named
+if [[ $(git --git-dir="$tmp/bare" log -1 --format=%s feat/racy-tip) != 'pushed during the run' ]]; then
+  printf 'a commit pushed during the run was lost\n' >&2
+  exit 1
+fi
+git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/racy-pr
 if git --git-dir="$tmp/bare" show-ref --verify --quiet refs/heads/feat/unlisted; then
   printf 'a branch named only in a comment was kept\n' >&2
   exit 1

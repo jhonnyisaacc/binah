@@ -11,7 +11,7 @@ import tempfile
 from model import BRANCHES
 
 FAKE_GH = """#!/usr/bin/env python3
-import json, os, sys
+import json, os, subprocess, sys
 args = sys.argv[1:]
 d = os.environ["PROBE_DIR"]
 def value(flag):
@@ -19,6 +19,18 @@ def value(flag):
 with open(os.path.join(d, "log"), "a") as log:
     log.write("gh " + " ".join(args) + "\\n")
 if args[:2] == ["pr", "list"] and "--state" in args and "--json" in args:
+    reads = os.path.join(d, "open-reads")
+    branch = os.environ.get("PROBE_MOVE_ON_REREAD")
+    if value("--state") == "open" and branch:
+        if os.path.exists(reads):
+            git = ["git", "--git-dir", os.path.join(d, "bare")]
+            def out(*rest):
+                return subprocess.run(git + list(rest), check=True, capture_output=True,
+                                      text=True).stdout.strip()
+            tree = out("rev-parse", f"refs/heads/{branch}^{{tree}}")
+            new = out("commit-tree", tree, "-p", f"refs/heads/{branch}", "-m", "pushed during the run")
+            out("update-ref", f"refs/heads/{branch}", new)
+        open(reads, "a").close()
     with open(os.path.join(d, value("--state") + ".json")) as f:
         rows = json.load(f)
     fields = value("--json").split(",")
@@ -112,17 +124,16 @@ def _check_order(log_lines, case):
             seen.append("fetch")
         elif line.startswith("git ") and " --delete " in line:
             seen.append("delete")
-    without_deletes = [s for s in seen if s != "delete"]
-    first_delete = seen.index("delete") if "delete" in seen else len(seen)
-    if without_deletes != ["open", "merged", "fetch"] or first_delete != 3:
+    deletes_reread = all(seen[i - 1] == "open" for i, step in enumerate(seen) if step == "delete")
+    if seen[:3] != ["open", "merged", "fetch"] or "other-read" in seen or not deletes_reread:
         raise ModelDrift(
-            "model assumes: read open PRs, read merged PRs, fetch, then delete. "
-            f"Script did {seen} for {case}. Update model.py to this order."
+            "model assumes: read open PRs, read merged PRs, fetch, then reread open PRs "
+            f"right before each delete. Script did {seen} for {case}. Update model.py to this order."
         )
 
 
 def measure_case(script_path, case):
-    branch, open_head, open_base, tip_moved = case
+    branch, open_head, open_base, tip_moved, moved_during = case
     d = tempfile.mkdtemp(prefix="keep-current-probe.")
     try:
         os.mkdir(os.path.join(d, "bin"))
@@ -143,7 +154,8 @@ def measure_case(script_path, case):
         run = subprocess.run(
             ["bash", script_path, "--repo", "acme/app",
              "--workdir", os.path.join(d, "work"), "--apply"],
-            env=_env(d), capture_output=True, text=True,
+            env=dict(_env(d), PROBE_MOVE_ON_REREAD=branch if moved_during else ""),
+            capture_output=True, text=True,
         )
         if run.returncode != 0:
             raise ModelDrift(
@@ -162,7 +174,7 @@ def measure_case(script_path, case):
 
 
 def measure(script_path):
-    """Return {(branch, open_head, open_base, tip_moved): script_deletes_it}."""
-    cases = list(itertools.product(BRANCHES, (False, True), (False, True), (False, True)))
+    """Return {(branch, open_head, open_base, tip_moved, moved_during): script_deletes_it}."""
+    cases = list(itertools.product(BRANCHES, (False, True), (False, True), (False, True), (False, True)))
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         return dict(pool.map(lambda c: measure_case(script_path, c), cases))

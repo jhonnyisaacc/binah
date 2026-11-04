@@ -23,7 +23,7 @@ For each open pull request it does one of three things.
 - The merge applies. Push the merge commit.
 - The merge conflicts. Abort the merge and comment with the conflicted paths. Leave the branch as it was.
 
-Then it deletes merged head branches. It keeps `main`, `master`, `refactor/run-*`, any branch listed in `policy/integration-branches` on the default branch, any branch an open pull request uses as its head or base, and any branch whose tip moved after its pull request merged.
+Then it deletes merged head branches. It keeps `main`, `master`, `refactor/run-*`, any branch listed in `policy/integration-branches` on the default branch, any branch an open pull request uses as its head or base, and any branch whose tip moved after its pull request merged. It rereads the open list right before each delete, and the delete fails if the branch moved, so commits pushed during the run are never lost.
 
 Run it once without `--apply` to print the plan.
 
