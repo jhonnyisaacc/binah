@@ -36,7 +36,7 @@ fi
 seed "$tmp/repo"
 ssh-keygen -q -t ed25519 -N '' -f "$tmp/id" -C 'preflight test'
 export SSH_SIGNING_KEY_BASE64
-SSH_SIGNING_KEY_BASE64=$(base64 -w0 "$tmp/id")
+SSH_SIGNING_KEY_BASE64=$(base64 <"$tmp/id" | tr -d '\n')
 (cd "$tmp/repo" && bash scripts/agent-preflight.sh >/dev/null)
 email=$(git -C "$tmp/repo" config --local --get user.email)
 name=$(git -C "$tmp/repo" config --local --get user.name)
