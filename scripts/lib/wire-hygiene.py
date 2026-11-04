@@ -12,6 +12,7 @@ REQUIRED = (
     "scripts/check-pr-body.sh",
     "scripts/check-one-pr.sh",
     "scripts/check-secrets.sh",
+    "scripts/check-guardrails-alone.sh",
 )
 
 GATES = "$RUNNER_TEMP/binah-base"
@@ -114,6 +115,13 @@ def steps_block(indent: str) -> str:
         nested + "else",
         nested + "  bash scripts/check-secrets.sh",
         nested + "fi",
+        f"{indent}- name: guardrail changes ride alone",
+        on_pull,
+        f"{key}env:",
+        token,
+        number,
+        f"{key}run: |",
+        nested + f'bash "{GATES}/scripts/check-guardrails-alone.sh" --repo "$GITHUB_REPOSITORY" --number "$PR_NUMBER"',
         f"{indent}# END binah hygiene",
     ]
     return "\n".join(lines) + "\n"

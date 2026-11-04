@@ -5,8 +5,8 @@ root=$(git rev-parse --show-toplevel)
 install=$root/scripts/binah-install
 tmp=$(mktemp -d)
 
-copied='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh'
-required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh'
+copied='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh'
+required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh'
 
 assert_wired() {
   local dest=$1
@@ -233,6 +233,8 @@ jobs:
         run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"
       - name: secret scan
         run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"
+      - name: guardrail changes ride alone
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-guardrails-alone.sh"
       # END binah hygiene
 EOF
 if bash "$install" --check "$history" >/dev/null 2>"$tmp/err"; then
@@ -268,6 +270,8 @@ jobs:
         run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"
       - name: secret scan
         run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"
+      - name: guardrail changes ride alone
+        run: bash "$RUNNER_TEMP/binah-base/scripts/check-guardrails-alone.sh"
       # END binah hygiene
   other:
     runs-on: ubuntu-latest
@@ -294,6 +298,7 @@ write_checkout() {
     printf '      - name: pull request body\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh"\n'
     printf '      - name: one pull request, one job\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"\n'
     printf '      - name: secret scan\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"\n'
+    printf '      - name: guardrail changes ride alone\n        run: bash "$RUNNER_TEMP/binah-base/scripts/check-guardrails-alone.sh"\n'
     printf '      # END binah hygiene\n'
   } >"$dir/.github/workflows/ci.yml"
 }

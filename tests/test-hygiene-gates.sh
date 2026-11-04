@@ -53,7 +53,7 @@ commit_all "$tmp/hostile" kit
 git -C "$tmp/hostile" push -q origin main
 git -C "$tmp/hostile" switch -q -c feat/weak
 printf '.*\n' >"$tmp/hostile/policy/branch-name.regex"
-for script in check-branch-name check-one-pr check-secrets check-pr-body; do
+for script in check-branch-name check-one-pr check-secrets check-pr-body check-guardrails-alone; do
   printf '#!/usr/bin/env bash\nexit 0\n' >"$tmp/hostile/scripts/$script.sh"
 done
 printf 'leak.txt\n' >>"$tmp/hostile/policy/secret-allowlist"
@@ -119,6 +119,21 @@ if (cd "$tmp/hostile" && bash "$gates/scripts/check-one-pr.sh" --prs "$tmp/prs.j
 fi
 if [[ -e $MARK ]]; then
   printf 'a re.py in the pull ran inside the gate\n' >&2
+  exit 1
+fi
+
+mkdir -p "$tmp/fakebin"
+cat >"$tmp/fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "api repos/acme/app/pulls/7 --jq .changed_files") printf '2\n' ;;
+  "api --paginate "*) printf 'src/app.ts\t\npolicy/author\t\n' ;;
+  *) printf 'unexpected gh: %s\n' "$*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$tmp/fakebin/gh"
+if PR_NUMBER=7 PATH="$tmp/fakebin:$PATH" run_step "$tmp/hostile" 'guardrail changes ride alone' >/dev/null 2>"$tmp/err"; then
+  printf 'a weakened guardrail check on the pull must not pass\n' >&2
   exit 1
 fi
 
