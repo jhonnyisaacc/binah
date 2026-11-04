@@ -387,6 +387,12 @@ if ! grep -q 'actions/checkout@' "$nocheckout/.github/workflows/ci.yml"; then
   exit 1
 fi
 
+nojob=$tmp/shape-nojob
+mkdir -p "$nojob/.github/workflows"
+printf 'name: hygiene\non:\n  pull_request:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make\n' >"$nojob/.github/workflows/hygiene.yml"
+bash "$install" "$nojob" >/dev/null
+bash "$install" --check "$nojob" >/dev/null
+
 nosteps=$tmp/shape-nosteps
 write_job "$nosteps" '    runs-on: ubuntu-latest'
 bash "$install" "$nosteps" >/dev/null

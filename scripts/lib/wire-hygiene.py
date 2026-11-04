@@ -351,7 +351,7 @@ def append_hygiene_job(text: str) -> str:
         "  hygiene:\n"
         "    runs-on: ubuntu-latest\n"
         "    steps:\n"
-        + checkout_and_steps()
+        + checkout_and_steps("      ")
     )
     if not text.endswith("\n"):
         text += "\n"
