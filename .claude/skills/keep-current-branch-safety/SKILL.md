@@ -14,7 +14,7 @@ compatibility: Needs python3 3.9 or later, git, jq, and bash.
 
 Run the check if you changed any of these:
 
-- `scripts/keep-current.sh`: `protected_branch`, `should_delete_branch`, or the part of `main` that reads PR lists, fetches, or deletes branches.
+- `scripts/keep-current.sh`: `protected_branch`, `should_delete_branch`, `read_open_branches`, or the part of `main` that reads PR lists, fetches, or deletes branches.
 - The order of those steps, or the data the script reads from `gh`.
 - Merge or branch rules in `merge-playbook.md` (sections 3, 4, 8) or `scripts/check-one-pr.sh`. The model assumes them.
 
@@ -24,7 +24,7 @@ Run the check if you changed any of these:
 python3 .claude/skills/keep-current-branch-safety/check.py
 ```
 
-It takes about 40 seconds and needs `python3` (3.9 or later), `git`, `jq`, and `bash`. It installs nothing, uses no network, and never calls real GitHub.
+It takes about a minute and needs `python3` (3.9 or later), `git`, `jq`, and `bash`. It installs nothing, uses no network, and never calls real GitHub.
 
 | Exit | Meaning | What to do |
 | --- | --- | --- |
@@ -35,11 +35,11 @@ It takes about 40 seconds and needs `python3` (3.9 or later), `git`, `jq`, and `
 
 A `STALE` line means the script changed since the sync commit, so reread the model before trusting a pass.
 
-To prove the check can still fail, run `self_test.py` in the same folder. It takes about 3 minutes. Run it after you edit the model or the probe.
+To prove the check can still fail, run `self_test.py` in the same folder. It takes about 9 minutes. Run it after you edit the model or the probe.
 
 ## How it works
 
-1. `probe.py` runs the real script against real local git repos with a fake `gh`. It tries each branch name in every combination of: open PR uses it as head, open PR uses it as base, tip moved since merge. That is 40 cases. It records whether the branch was really deleted, so the delete rule is measured and never copied into the model.
+1. `probe.py` runs the real script against real local git repos with a fake `gh`. It tries each branch name in every combination of: open PR uses it as head, open PR uses it as base, tip moved since merge. And whether the tip moves between the reread and the delete. That is 80 cases. It records whether the branch was really deleted, so the delete rule is measured and never copied into the model.
 2. `model.py` plays that measured rule through every ordering of agent pushes, PR opens, squash merges, restack retargets, and keep-current steps.
 3. `check.py` reports the shortest path to each violation and compares the results with `expected-findings.txt`.
 
@@ -60,7 +60,7 @@ Each rule is checked in two situations. `between-runs` means agents act only whi
 
 These are real and unfixed. They are listed in `expected-findings.txt` so that a new break still stands out. Do not treat exit 0 as "the sweep is safe".
 
-- **Changes during a run** (all three `during-run` findings). The script reads its PR lists once and deletes later, so anything that happens in between is missed. The model found these orderings; they have not been replayed live. Rereading before each delete would only shrink the window. Tracked in issue #11.
+- **A child PR opened at the last moment** (`during-run open-base-kept`). The script rereads the open list right before each delete, but GitHub offers no way to make that read and the delete one step. A PR opened onto a merged branch in that gap loses its base, and GitHub can close it. Its commits stay on its own branch. The model found this ordering; it has not been replayed live.
 
 ## Real bug or modeling error?
 
@@ -81,7 +81,7 @@ Never lower a bound or remove a rule to get a pass.
 
 ## Coverage
 
-Covered: `scripts/keep-current.sh` (`protected_branch`, `should_delete_branch`, and in `main` the PR list reads, the fetch, and the delete loop).
+Covered: `scripts/keep-current.sh` (`protected_branch`, `should_delete_branch`, `read_open_branches`, and in `main` the PR list reads, the fetch, and the delete loop).
 
 Sync commit: `cbc0099`
 

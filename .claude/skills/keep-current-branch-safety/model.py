@@ -133,11 +133,20 @@ def _script_steps(s, decision):
                               runs=s.runs + 1), ())
             return
         b = s.queue[0]
-        rest = s._replace(queue=s.queue[1:])
+        if _get(s.tips, b) == 0:
+            yield (f"keep-current keeps {b}", s._replace(queue=s.queue[1:]), ())
+            return
+        snap = tuple((p[1], p[2]) for p in _open_prs(s))
+        yield (f"keep-current rereads the open PR list before {b}",
+               s._replace(pc="confirm", open_snap=snap), ())
+    elif s.pc == "confirm":
+        b = s.queue[0]
+        rest = s._replace(pc="sweep", queue=s.queue[1:])
         oids = {o for h, o in s.merged_snap if h == b}
         key = (b, any(h == b for h, _ in s.open_snap),
                any(base == b for _, base in s.open_snap),
-               _get(s.tip_snap, b) not in oids)
+               _get(s.tip_snap, b) not in oids,
+               _get(s.tips, b) != _get(s.tip_snap, b))
         if _get(s.tips, b) == 0 or not decision[key]:
             yield (f"keep-current keeps {b}", rest, ())
         else:
