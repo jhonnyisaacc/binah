@@ -155,12 +155,12 @@ def new_workflow() -> str:
     )
 
 
-def checkout_and_steps() -> str:
+def checkout_and_steps(indent: str) -> str:
     return (
-        "      - uses: actions/checkout@v4\n"
-        "        with:\n"
-        "          fetch-depth: 1\n"
-        + steps_block("      ")
+        f"{indent}- uses: actions/checkout@v4\n"
+        f"{indent}  with:\n"
+        f"{indent}    fetch-depth: 1\n"
+        + steps_block(indent)
     )
 
 
@@ -278,16 +278,50 @@ def insert_at(lines: list[str], index: int, text: str) -> None:
     lines[index:index] = chunk
 
 
-def has_steps(lines: list[str], span: dict) -> bool:
+def job_key(lines: list[str], span: dict, name: str) -> tuple[int, str] | None:
     want = span["indent"] + 2
     for index in range(span["start"] + 1, span["end"]):
         raw = lines[index].rstrip("\n")
         if not raw.strip():
             continue
+        if len(raw) - len(raw.lstrip(" ")) != want:
+            continue
+        match = re.match(rf"{name}\s*:\s*(.*)$", raw.strip())
+        if match:
+            return index, YAML_COMMENT.sub("", match.group(1)).strip()
+    return None
+
+
+def steps_end(lines: list[str], span: dict, steps_at: int) -> int:
+    key_indent = len(lines[steps_at]) - len(lines[steps_at].lstrip(" "))
+    end = steps_at + 1
+    for index in range(steps_at + 1, span["end"]):
+        raw = lines[index].rstrip("\n")
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
         indent = len(raw) - len(raw.lstrip(" "))
-        if indent == want and raw.strip().startswith("steps:"):
-            return True
-    return False
+        if indent < key_indent or (indent == key_indent and not raw.lstrip().startswith("- ")):
+            break
+        end = index + 1
+    return end
+
+
+def has_checkout(lines: list[str], start: int, end: int) -> bool:
+    text = "\n".join(YAML_COMMENT.sub("", line.rstrip("\n")) for line in lines[start:end])
+    return CHECKOUT_USES.search(text) is not None
+
+
+def refuse_shape(lines: list[str], span: dict) -> None:
+    def refuse(reason: str) -> None:
+        raise SystemExit(f"cannot wire the hygiene job: {reason}. Change the job, then run binah-install again.")
+
+    if job_key(lines, span, "uses") is not None:
+        refuse("it calls a reusable workflow, and such a job cannot have steps")
+    steps = job_key(lines, span, "steps")
+    if steps is None:
+        return
+    if steps[1]:
+        refuse(f"its steps are written inline (steps: {steps[1]})")
 
 
 def update_job(lines: list[str], span: dict) -> list[str]:
@@ -299,12 +333,16 @@ def update_job(lines: list[str], span: dict) -> list[str]:
         block = steps_block(indent).splitlines(keepends=True)
         lines[begin : end + 1] = block
         return lines
-    indent = step_indent(lines, span)
-    block = steps_block(indent)
-    if not has_steps(lines, span):
+    refuse_shape(lines, span)
+    steps = job_key(lines, span, "steps")
+    if steps is None:
         key = " " * (span["indent"] + 2)
-        block = f"{key}steps:\n{block}"
-    insert_at(lines, span["end"], block)
+        insert_at(lines, span["end"], f"{key}steps:\n{checkout_and_steps(key + '  ')}")
+        return lines
+    end = steps_end(lines, span, steps[0])
+    indent = step_indent(lines, span)
+    block = steps_block(indent) if has_checkout(lines, steps[0], end) else checkout_and_steps(indent)
+    insert_at(lines, end, block)
     return lines
 
 

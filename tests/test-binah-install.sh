@@ -338,5 +338,62 @@ for step in \
   fi
 done
 
+write_job() {
+  local dir=$1
+  local body=$2
+  mkdir -p "$dir/.github/workflows"
+  printf 'name: CI\non:\n  pull_request:\njobs:\n  hygiene:\n%s\n' "$body" >"$dir/.github/workflows/ci.yml"
+}
+
+case_number=0
+for body in \
+  $'    runs-on: ubuntu-latest\n    steps: []' \
+  $'    runs-on: ubuntu-latest\n    steps: *shared' \
+  $'    uses: ./.github/workflows/reuse.yml'; do
+  case_number=$((case_number + 1))
+  dir=$tmp/shape-bad-$case_number
+  write_job "$dir" "$body"
+  cp "$dir/.github/workflows/ci.yml" "$tmp/before.yml"
+  if bash "$install" "$dir" >/dev/null 2>"$tmp/err"; then
+    printf 'install should refuse this job:\n%s\n' "$body" >&2
+    exit 1
+  fi
+  if ! grep -q 'cannot wire the hygiene job' "$tmp/err"; then
+    printf 'install should say why it refused:\n' >&2
+    cat "$tmp/err" >&2
+    exit 1
+  fi
+  if ! cmp -s "$tmp/before.yml" "$dir/.github/workflows/ci.yml"; then
+    printf 'a refused install changed the workflow:\n%s\n' "$body" >&2
+    exit 1
+  fi
+done
+
+trailing=$tmp/shape-trailing
+write_job "$trailing" $'    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n    timeout-minutes: 5'
+bash "$install" "$trailing" >/dev/null
+tail_line=$(tail -n 1 "$trailing/.github/workflows/ci.yml")
+if [[ $tail_line != '    timeout-minutes: 5' ]]; then
+  printf 'the steps must stay inside steps:, before later job keys:\n' >&2
+  cat "$trailing/.github/workflows/ci.yml" >&2
+  exit 1
+fi
+
+nocheckout=$tmp/shape-nocheckout
+write_job "$nocheckout" $'    runs-on: ubuntu-latest\n    steps:\n      - run: echo first'
+bash "$install" "$nocheckout" >/dev/null
+if ! grep -q 'actions/checkout@' "$nocheckout/.github/workflows/ci.yml"; then
+  printf 'a job with no checkout needs one before the gates\n' >&2
+  exit 1
+fi
+
+nosteps=$tmp/shape-nosteps
+write_job "$nosteps" '    runs-on: ubuntu-latest'
+bash "$install" "$nosteps" >/dev/null
+if ! grep -q 'actions/checkout@' "$nosteps/.github/workflows/ci.yml"; then
+  printf 'a job with no steps needs a checkout before the gates\n' >&2
+  exit 1
+fi
+
 rm -rf "$tmp"
 printf 'binah-install ok\n'
