@@ -406,17 +406,31 @@ def wire(root: Path) -> None:
     write_if_changed(path, new_workflow())
 
 
-def missing_scripts(root: Path) -> list[str]:
+def wiring_problems(root: Path) -> list[str]:
     found = find_hygiene(root)
     if found is None:
-        return ["hygiene job", *REQUIRED]
+        return ["there is no hygiene job. Run binah-install."]
     _path, lines, span = found
-    body = "".join(lines[span["start"] : span["end"]])
-    live = "\n".join(YAML_COMMENT.sub("", line) for line in body.splitlines())
-    missing = [script for script in REQUIRED if f"binah-base/{script}" not in live]
+    bounds = marker_bounds(lines, span)
+    if bounds is None:
+        return ["the hygiene job has no binah block. Run binah-install."]
+    begin, end = bounds
+    indent = re.match(r"^( *)# BEGIN binah hygiene", lines[begin]).group(1)
+    problems = []
+    if "".join(lines[begin : end + 1]) != steps_block(indent):
+        problems.append("the binah block differs from what this binah writes. Run binah-install.")
+    if job_key(lines, span, "if") is not None:
+        problems.append("the hygiene job has a job-level if, so the gates may not run.")
+    if job_key(lines, span, "continue-on-error") is not None:
+        problems.append("the hygiene job sets continue-on-error, so a failed gate would not fail it.")
+    trigger = "\n".join(YAML_COMMENT.sub("", line.rstrip("\n")) for line in lines[: span["start"]])
+    if not re.search(r"\bpull_request\b", trigger):
+        problems.append("the workflow does not run on pull_request.")
+    if not has_checkout(lines, span["start"], begin):
+        problems.append("the hygiene job has no actions/checkout step before the binah block.")
     if checkout_requests_history(lines, span):
-        missing.append("fetch-depth: 0 history scan is enabled")
-    return missing
+        problems.append("fetch-depth: 0 history scan is enabled.")
+    return problems
 
 
 CHECKOUT_USES = re.compile(r"""\buses["']?\s*:\s*["']?actions/checkout@""")
@@ -446,10 +460,10 @@ def checkout_requests_history(lines: list[str], span: dict) -> bool:
 
 def main() -> None:
     if len(sys.argv) == 3 and sys.argv[1] == "--check":
-        missing = missing_scripts(Path(sys.argv[2]))
-        if missing:
-            for item in missing:
-                print(f"hygiene job does not run {item}", file=sys.stderr)
+        problems = wiring_problems(Path(sys.argv[2]))
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        if problems:
             sys.exit(1)
         return
     if len(sys.argv) != 2:
