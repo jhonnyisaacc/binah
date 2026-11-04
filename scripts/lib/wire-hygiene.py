@@ -332,17 +332,34 @@ def missing_scripts(root: Path) -> list[str]:
     _path, lines, span = found
     body = "".join(lines[span["start"] : span["end"]])
     missing = [script for script in REQUIRED if script not in body]
-    if "fetch-depth: 0" in steps_region(body):
+    if checkout_requests_history(lines, span):
         missing.append("fetch-depth: 0 history scan is enabled")
     return missing
 
 
-def steps_region(body: str) -> str:
-    begin = body.find("# BEGIN binah hygiene")
-    end = body.find("# END binah hygiene")
-    if begin == -1 or end == -1:
-        return ""
-    return body[begin:end]
+CHECKOUT_USES = re.compile(r"""\buses["']?\s*:\s*["']?actions/checkout@""")
+FULL_HISTORY = re.compile(r"""fetch-depth["']?\s*:\s*["']?0["']?\s*([,}]|$)""", re.MULTILINE)
+YAML_COMMENT = re.compile(r"(^|\s)#.*$")
+
+
+def checkout_requests_history(lines: list[str], span: dict) -> bool:
+    step_indent = None
+    starts = []
+    for index in range(span["start"], span["end"]):
+        match = re.match(r"^( +)- ", lines[index])
+        if not match or len(match.group(1)) <= span["indent"]:
+            continue
+        indent = len(match.group(1))
+        if step_indent is None:
+            step_indent = indent
+        if indent == step_indent:
+            starts.append(index)
+    starts.append(span["end"])
+    for start, end in zip(starts, starts[1:]):
+        text = "\n".join(YAML_COMMENT.sub("", line.rstrip("\n")) for line in lines[start:end])
+        if CHECKOUT_USES.search(text) and FULL_HISTORY.search(text):
+            return True
+    return False
 
 
 def main() -> None:

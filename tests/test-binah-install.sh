@@ -196,5 +196,128 @@ mkdir -p "$caller"
 bash "$root/scripts/install-policy-kit.sh" "$caller" >/dev/null
 assert_wired "$caller"
 
+# fetch-depth: 0 on the hygiene checkout fails even when it sits outside the marker block.
+history=$tmp/history
+mkdir -p "$history/.github/workflows"
+cat >"$history/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on:
+  pull_request:
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # BEGIN binah hygiene
+      - name: branch name
+        run: bash scripts/check-branch-name.sh
+      - name: pull request body
+        run: bash scripts/check-pr-body.sh
+      - name: one pull request, one job
+        run: bash scripts/check-one-pr.sh
+      - name: secret scan
+        run: bash scripts/check-secrets.sh
+      # END binah hygiene
+EOF
+if bash "$install" --check "$history" >/dev/null 2>"$tmp/err"; then
+  printf 'fetch-depth: 0 on the hygiene checkout should fail\n' >&2
+  exit 1
+fi
+if ! grep -q 'fetch-depth: 0' "$tmp/err"; then
+  printf 'checkout history error should name fetch-depth: 0\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+# The same text in another job is not the hygiene checkout.
+shallow=$tmp/shallow
+mkdir -p "$shallow/.github/workflows"
+cat >"$shallow/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on:
+  pull_request:
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      # BEGIN binah hygiene
+      - name: branch name
+        run: bash scripts/check-branch-name.sh
+      - name: pull request body
+        run: bash scripts/check-pr-body.sh
+      - name: one pull request, one job
+        run: bash scripts/check-one-pr.sh
+      - name: secret scan
+        run: bash scripts/check-secrets.sh
+      # END binah hygiene
+  other:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+EOF
+if ! bash "$install" --check "$shallow" >/dev/null 2>"$tmp/err"; then
+  printf 'fetch-depth: 0 outside the hygiene job should not fail:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+write_checkout() {
+  local dir=$1
+  local step=$2
+  mkdir -p "$dir/.github/workflows"
+  {
+    printf 'name: CI\non:\n  pull_request:\njobs:\n  hygiene:\n    runs-on: ubuntu-latest\n    steps:\n'
+    printf '%s\n' "$step"
+    printf '      # BEGIN binah hygiene\n'
+    printf '      - name: branch name\n        run: bash scripts/check-branch-name.sh\n'
+    printf '      - name: pull request body\n        run: bash scripts/check-pr-body.sh\n'
+    printf '      - name: one pull request, one job\n        run: bash scripts/check-one-pr.sh\n'
+    printf '      - name: secret scan\n        run: bash scripts/check-secrets.sh\n'
+    printf '      # END binah hygiene\n'
+  } >"$dir/.github/workflows/ci.yml"
+}
+
+case_number=0
+for step in \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: "0"' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: \'0\'' \
+  $'      - uses: actions/checkout@v4\n        with:\n          "fetch-depth": 0' \
+  $'      - uses: actions/checkout@v4\n        with: {fetch-depth: 0}' \
+  $'      - uses: actions/checkout@v4\n        with: {fetch-depth: 0, ref: main}' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 0 # all history' \
+  $'      - name: check out\n        uses: "actions/checkout@v4"\n        with:\n          fetch-depth: 0'; do
+  case_number=$((case_number + 1))
+  dir=$tmp/depth-bad-$case_number
+  write_checkout "$dir" "$step"
+  if bash "$install" --check "$dir" >/dev/null 2>"$tmp/err"; then
+    printf 'full history checkout should fail:\n%s\n' "$step" >&2
+    exit 1
+  fi
+done
+
+case_number=0
+for step in \
+  $'      - uses: actions/checkout@v4\n        with:\n          # fetch-depth: 0 was too slow\n          fetch-depth: 1' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 1 # not fetch-depth: 0' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 10' \
+  $'      - name: notes about actions/checkout\n        run: echo "fetch-depth: 0"' \
+  $'      # uses: actions/checkout@v3 with fetch-depth: 0\n      - uses: actions/checkout@v4'; do
+  case_number=$((case_number + 1))
+  dir=$tmp/depth-ok-$case_number
+  write_checkout "$dir" "$step"
+  if ! bash "$install" --check "$dir" >/dev/null 2>"$tmp/err"; then
+    printf 'this checkout should pass:\n%s\n' "$step" >&2
+    cat "$tmp/err" >&2
+    exit 1
+  fi
+done
+
 rm -rf "$tmp"
 printf 'binah-install ok\n'
