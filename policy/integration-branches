@@ -1,0 +1,9 @@
+# Integration branch names, one per line.
+# A line is an exact name (feat/davar-v2) or a glob. A * also matches non-digits
+# and slashes, so a * line lets a branch like refactor/run-cleanup skip the limits.
+# scripts/check-one-pr.sh reads this file from the same tree as the script.
+# A missing file means the numbered refactor/run-<nn> names below.
+# Adding a name is Tier A (editing guardrail files) and needs Jhonny's approval.
+refactor/run-[0-9]
+refactor/run-[0-9][0-9]
+refactor/run-[0-9][0-9][0-9]

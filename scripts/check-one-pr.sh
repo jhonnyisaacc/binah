@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
 # One pull request, one job.
 # Fails when a later pull request has been merged into a pull that is still
-# open, unless policy/backlog-recovery on the pull's base branch lists this
-# pull. The check reads origin/<base>:policy/backlog-recovery and never the
-# pull's head. A missing file or a failed read counts as not listed.
+# open, unless policy/backlog-recovery on the default branch lists this pull.
+# The check reads origin/<default>:policy/backlog-recovery, never the pull's
+# head or a base the pull chose. A missing file or a failed read counts as not
+# listed.
 # Adding a number is Tier A. The label approach was dropped because agents
 # hold Jhonny's credentials. Keep-current and restack are not pull requests
 # and do not trip this.
 # Fails when stack depth is over 2, or this pull is the 6th or later open
 # pull request, not counting the integration pull request.
-# Merges into an open refactor/run-<nn> integration pull request are the
+# Integration names are read from policy/integration-branches next to this
+# script (one exact name or glob per line). A missing file means
+# the numbered refactor/run-<nn> names. Merges into an open integration pull request are the
 # run's normal merges, so that pull request is not the later-merge failure.
 set -euo pipefail
 
 usage() {
-  printf 'usage: check-one-pr.sh (--prs <file> | --repo <owner/name>) --number <n>\n' >&2
+  printf 'usage: check-one-pr.sh (--prs <file> | --repo <owner/name>) --number <n> [--default-branch <name>]\n' >&2
   exit 2
 }
 
 prs=
 repo=
 number=
+default_branch=
 while [[ $# -gt 0 ]]; do
   case $1 in
     --prs)
@@ -33,6 +37,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --number)
       number=$2
+      shift
+      ;;
+    --default-branch)
+      default_branch=$2
       shift
       ;;
     *)
@@ -55,12 +63,74 @@ if [[ -z $prs ]]; then
   prs=$(mktemp)
   owned=1
   live=1
-  gh pr list --repo "$repo" --state all --limit 200 \
-    --json number,state,createdAt,baseRefName,headRefName,isDraft >"$prs"
+  view=$(mktemp)
+  open=$(mktemp)
+  merged=$(mktemp)
+  gh pr view "$number" --repo "$repo" \
+    --json number,state,createdAt,baseRefName,headRefName,isDraft >"$view"
+  head_ref=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["headRefName"])' "$view")
+  gh api --paginate --slurp "repos/${repo}/pulls?state=open&per_page=100" >"$open"
+  gh pr list --repo "$repo" --state merged --base "$head_ref" --limit 1000 \
+    --json number,state,createdAt,baseRefName,headRefName,isDraft >"$merged"
+  python3 -I - "$view" "$open" "$merged" >"$prs" <<'PY'
+import json
+import sys
+
+
+def flatten(data):
+    if isinstance(data, dict):
+        return [data]
+    rows = []
+    for item in data:
+        if isinstance(item, list):
+            rows.extend(item)
+        elif isinstance(item, dict):
+            rows.append(item)
+    return rows
+
+
+def row(item):
+    if "headRefName" in item or "baseRefName" in item:
+        base = item.get("baseRefName") or ""
+        head = item.get("headRefName") or ""
+        created = item.get("createdAt") or ""
+        draft = item.get("isDraft")
+    else:
+        base = (item.get("base") or {}).get("ref") or ""
+        head = (item.get("head") or {}).get("ref") or ""
+        created = item.get("created_at") or ""
+        draft = item.get("draft")
+    return {
+        "number": int(item["number"]),
+        "state": str(item.get("state") or "").upper(),
+        "createdAt": created,
+        "baseRefName": base,
+        "headRefName": head,
+        "isDraft": bool(draft),
+    }
+
+
+seen = {}
+for path in sys.argv[1:]:
+    for item in flatten(json.load(open(path))):
+        if "number" not in item:
+            continue
+        pulled = row(item)
+        seen[pulled["number"]] = pulled
+json.dump(list(seen.values()), sys.stdout)
+PY
+  rm -f "$view" "$open" "$merged"
+  if [[ -z $default_branch ]]; then
+    default_branch=$(gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name)
+  fi
 fi
 
+script_root=$(cd "$(dirname "$0")/.." && pwd)
+policy_file=$script_root/policy/integration-branches
+
 set +e
-python3 - "$prs" "$number" "$live" <<'PY'
+python3 -I - "$prs" "$number" "$live" "${default_branch:-main}" "$policy_file" <<'PY'
+import fnmatch
 import json
 import re
 import subprocess
@@ -70,13 +140,36 @@ import sys
 # Open no new pull request: the oldest MAX_OPEN stay allowed.
 MAX_DEPTH = 2
 MAX_OPEN = 5
-INTEGRATION = re.compile(r"refactor/run-[0-9]+\Z")
+DEFAULT_INTEGRATION = (
+    "refactor/run-[0-9]",
+    "refactor/run-[0-9][0-9]",
+    "refactor/run-[0-9][0-9][0-9]",
+)
 BASE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 FOLD_NEXT = (
     "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in policy/backlog-recovery."
 )
 
-path, number, live = sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1"
+path, number, live, default_branch, policy_path = (
+    sys.argv[1],
+    int(sys.argv[2]),
+    sys.argv[3] == "1",
+    sys.argv[4],
+    sys.argv[5],
+)
+
+
+def integration_patterns(policy):
+    try:
+        text = open(policy).read()
+    except OSError:
+        return DEFAULT_INTEGRATION
+    found = []
+    for line in text.splitlines():
+        body = line.split("#", 1)[0].strip()
+        if body:
+            found.append(body)
+    return tuple(found)
 try:
     data = json.load(open(path))
 except json.JSONDecodeError:
@@ -119,8 +212,14 @@ def show_recovery(base):
 
     proc = show()
     if proc.returncode != 0 and live:
+        shallow = subprocess.run(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        depth = ["--depth", "1"] if shallow == "true" else []
         subprocess.run(
-            ["git", "fetch", "--depth", "1", "origin", base],
+            ["git", "fetch", *depth, "origin", base],
             capture_output=True,
             text=True,
         )
@@ -149,14 +248,17 @@ if current["state"] != "OPEN":
     sys.exit(0)
 
 
+patterns = integration_patterns(policy_path)
+
+
 def integration(name):
-    return INTEGRATION.fullmatch(name) is not None
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
 
 
 by_head = {pr["head"]: pr for pr in prs if pr["state"] == "OPEN"}
 messages = []
 
-recovery_ok = listed(show_recovery(current["base"]), current["number"])
+recovery_ok = listed(show_recovery(default_branch), current["number"])
 if not integration(current["head"]) and not recovery_ok:
     for other in prs:
         if other["number"] == current["number"]:

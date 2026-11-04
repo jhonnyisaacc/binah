@@ -13,10 +13,26 @@ pr_action() {
 }
 
 protected_branch() {
+  local pattern
   case $1 in
     main | master | refactor/run-*) return 0 ;;
   esac
+  while IFS= read -r pattern; do
+    if [[ -n $pattern && $1 == $pattern ]]; then
+      return 0
+    fi
+  done <<<"${integration_names:-}"
   return 1
+}
+
+read_integration_names() {
+  local workdir=$1 default_ref
+  default_ref=$(git -C "$workdir" ls-remote --symref origin HEAD | awk '$1 == "ref:" { print $2 }')
+  if [[ -z $default_ref ]]; then
+    return 0
+  fi
+  git -C "$workdir" show "origin/${default_ref#refs/heads/}:policy/integration-branches" 2>/dev/null |
+    sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//' || true
 }
 
 should_delete_branch() {
@@ -65,11 +81,12 @@ main() {
 
   local open merged
   open=$(gh pr list --repo "$repo" --state open --limit 200 --json number,headRefName,baseRefName)
-  merged=$(gh pr list --repo "$repo" --state merged --limit 200 --json headRefName)
+  merged=$(gh pr list --repo "$repo" --state merged --limit 200 --json headRefName,headRefOid)
   git -C "$workdir" fetch --quiet origin
+  integration_names=$(read_integration_names "$workdir")
 
   local open_bases
-  open_bases=$(printf '%s' "$open" | jq -r '.[].baseRefName')
+  open_bases=$(printf '%s' "$open" | jq -r '.[].baseRefName, .[].headRefName')
 
   local number head base ancestor same action files
   while IFS=$'\t' read -r number head base; do
@@ -108,10 +125,11 @@ main() {
     fi
   done < <(printf '%s' "$open" | jq -r '.[] | "\(.number)\t\(.headRefName)\t\(.baseRefName)"')
 
-  local branch
-  while IFS= read -r branch; do
+  local branch merged_oid
+  while IFS=$'\t' read -r branch merged_oid; do
     [[ -n $branch ]] || continue
-    if should_delete_branch "$branch" "$open_bases"; then
+    if should_delete_branch "$branch" "$open_bases" &&
+      [[ $(git -C "$workdir" rev-parse "origin/${branch}" 2>/dev/null || true) == "$merged_oid" ]]; then
       printf 'delete %s\n' "$branch"
       if [[ $apply -eq 1 ]]; then
         git -C "$workdir" push --quiet origin --delete "$branch" || true
@@ -119,7 +137,7 @@ main() {
     else
       printf 'keep %s\n' "$branch"
     fi
-  done < <(printf '%s' "$merged" | jq -r '.[].headRefName')
+  done < <(printf '%s' "$merged" | jq -r '.[] | "\(.headRefName)\t\(.headRefOid)"')
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

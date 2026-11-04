@@ -190,10 +190,200 @@ write '[
 ]'
 expect_pass 2
 
+# A brief-named integration branch is exempt only when the policy file lists it.
+kit=$tmp/kit
+mkdir -p "$kit/scripts" "$kit/policy"
+cp "$check" "$kit/scripts/check-one-pr.sh"
+chmod +x "$kit/scripts/check-one-pr.sh"
+named=$kit/scripts/check-one-pr.sh
+printf 'refactor/run-*\nfeat/davar-v2\n' >"$kit/policy/integration-branches"
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/davar-v2"},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/davar-v2","headRefName":"feat/child"}
+]'
+if ! "$named" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+  printf 'feat/davar-v2 should be an integration branch:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+# A comment is not a listing. The same head then fails.
+printf '# feat/davar-v2\nrefactor/run-*\n' >"$kit/policy/integration-branches"
+if "$named" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+  printf 'an unlisted branch must not be integration\n' >&2
+  exit 1
+fi
+
+for name in refactor/run-cleanup refactor/run-loop-tidy refactor/run-01/x; do
+  write '[
+    {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"'"$name"'"},
+    {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"'"$name"'","headRefName":"feat/a"}
+  ]'
+  expect_fail 1 'later pull request #2'
+done
+for policy in shipped missing; do
+  if [[ $policy == shipped ]]; then
+    cp "$root/policy/integration-branches" "$kit/policy/integration-branches"
+  else
+    rm -f "$kit/policy/integration-branches"
+  fi
+  write '[
+    {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"refactor/run-cleanup"},
+    {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"refactor/run-cleanup","headRefName":"feat/a"}
+  ]'
+  if "$kit/scripts/check-one-pr.sh" --prs "$tmp/prs.json" --number 1 >/dev/null 2>&1; then
+    printf 'refactor/run-cleanup must not count as an integration branch (%s policy)\n' "$policy" >&2
+    exit 1
+  fi
+done
+# Missing file defaults to refactor/run-*.
+rm -f "$kit/policy/integration-branches"
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"refactor/run-01"},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"refactor/run-01","headRefName":"feat/a"}
+]'
+if ! "$named" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+  printf 'a missing policy file should still allow refactor/run-*:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+# The named branch stops the stack walk and is left out of the open cap.
+printf 'feat/davar-v2\n' >"$kit/policy/integration-branches"
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/davar-v2"},
+  {"number":2,"state":"OPEN","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/davar-v2","headRefName":"feat/b"},
+  {"number":3,"state":"OPEN","createdAt":"2026-10-03T00:00:00Z","baseRefName":"feat/b","headRefName":"feat/c"}
+]'
+if ! "$named" --prs "$tmp/prs.json" --number 3 >/dev/null 2>"$tmp/err"; then
+  printf 'a chain that reaches feat/davar-v2 should stay within depth 2:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+open='['
+for n in 1 2 3 4 5 6; do
+  open+=$(printf '{"number":%s,"state":"OPEN","createdAt":"2026-10-0%sT00:00:00Z","baseRefName":"feat/davar-v2","headRefName":"feat/p%s"},' "$n" "$n" "$n")
+done
+open+='{"number":7,"state":"OPEN","createdAt":"2026-09-01T00:00:00Z","baseRefName":"main","headRefName":"feat/davar-v2"}]'
+write "$open"
+if ! "$named" --prs "$tmp/prs.json" --number 7 >/dev/null 2>"$tmp/err"; then
+  printf 'named integration pull should not count toward the open cap:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+if ! "$named" --prs "$tmp/prs.json" --number 5 >/dev/null 2>"$tmp/err"; then
+  printf 'fifth feature pull should pass beside a named integration pull:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+if "$named" --prs "$tmp/prs.json" --number 6 >/dev/null 2>"$tmp/err"; then
+  printf 'sixth feature pull should fail beside a named integration pull\n' >&2
+  exit 1
+fi
+if ! grep -q 'pull #6 is the 6th open pull; the limit is 5' "$tmp/err"; then
+  printf 'open-cap error should name pull #6:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
 # The rule text is not the check. The script has to exit non-zero.
 printf 'One pull request is one job. Stack depth at most 2.\n' >"$tmp/sentence.txt"
 if "$check" --prs "$tmp/sentence.txt" --number 1 >/dev/null 2>"$tmp/err"; then
   printf 'a template sentence must not pass\n' >&2
+  exit 1
+fi
+
+repo=$(new_repo fold-chosen-base)
+git -C "$repo" checkout -q -b feat/recovery
+mkdir -p "$repo/policy"
+printf '1\n' >"$repo/policy/backlog-recovery"
+git -C "$repo" add policy/backlog-recovery
+commit_repo "$repo" 'list on a branch the pull chose'
+git -C "$repo" push -q origin feat/recovery
+git -C "$repo" fetch -q origin
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"feat/recovery","headRefName":"feat/one"},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
+]'
+(
+  cd "$repo"
+  if "$check" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+    printf 'a listing on a base the pull chose must not grant a fold\n' >&2
+    exit 1
+  fi
+)
+
+repo=$(new_repo fold-live)
+git -C "$repo" remote set-url origin "file://$tmp/bare-fold-live"
+git -C "$repo" -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q --allow-empty -m second
+git -C "$repo" push -q origin main
+mkdir -p "$tmp/bin"
+cat >"$tmp/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "repo view acme/app --json defaultBranchRef --jq .defaultBranchRef.name") printf 'main\n' ;;
+  "pr view 1 --repo acme/app "*) printf '%s\n' '{"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one"}' ;;
+  "api --paginate --slurp "*) printf '%s\n' '[[]]' ;;
+  "pr list --repo acme/app --state merged "*) printf '%s\n' '[]' ;;
+  *) printf 'unexpected gh: %s\n' "$*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$tmp/bin/gh"
+git -C "$repo" update-ref -d refs/remotes/origin/main
+(
+  cd "$repo"
+  PATH="$tmp/bin:$PATH" "$check" --repo acme/app --number 1
+  if [[ $(git rev-parse --is-shallow-repository) != false ]]; then
+    printf 'a live run made a full clone shallow\n' >&2
+    exit 1
+  fi
+)
+
+# The live query asks for open pulls and for merged pulls based on this head.
+# It does not list every pull in the repository.
+log=$tmp/gh.log
+mkdir -p "$tmp/bin"
+cat >"$tmp/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GH_LOG"
+if [[ $* == 'repo view '* ]]; then
+  printf 'main\n'
+  exit 0
+fi
+if [[ $* == *'pr view'* ]]; then
+  printf '%s\n' '{"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","isDraft":false}'
+  exit 0
+fi
+if [[ $* == *'state=open'* ]]; then
+  printf '%s\n' '[[{"number":1,"state":"open","created_at":"2026-10-01T00:00:00Z","draft":false,"base":{"ref":"main"},"head":{"ref":"feat/one"}}]]'
+  exit 0
+fi
+if [[ $* == *'--base feat/one'* ]]; then
+  printf '%s\n' '[{"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two","isDraft":false}]'
+  exit 0
+fi
+printf 'unexpected gh: %s\n' "$*" >&2
+exit 1
+EOF
+chmod +x "$tmp/bin/gh"
+git init -q "$tmp/empty"
+if (cd "$tmp/empty" && GH_LOG=$log PATH="$tmp/bin:$PATH" "$check" --repo acme/app --number 1) >/dev/null 2>"$tmp/err"; then
+  printf 'a merged child from the narrow query should fail\n' >&2
+  exit 1
+fi
+if ! grep -q 'later pull request #2' "$tmp/err"; then
+  printf 'narrow query did not report the merged child:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+if grep -q -- '--state all' "$log" || grep -q -- '--limit 200' "$log" || grep -q -- '--search' "$log"; then
+  printf 'live query lists every pull, or relies on the search index:\n' >&2
+  cat "$log" >&2
+  exit 1
+fi
+if ! grep -q 'state=open' "$log" || ! grep -q -- '--base feat/one' "$log"; then
+  printf 'live query did not ask for open pulls and merged pulls on this head:\n' >&2
+  cat "$log" >&2
   exit 1
 fi
 

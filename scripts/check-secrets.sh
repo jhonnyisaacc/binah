@@ -19,7 +19,7 @@ else
   scan_root=$script_root
 fi
 
-exec python3 - "$script_root" "$scan_root" <<'PY'
+exec python3 -I - "$script_root" "$scan_root" <<'PY'
 import re
 import sys
 from pathlib import Path

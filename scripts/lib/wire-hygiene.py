@@ -14,14 +14,25 @@ REQUIRED = (
     "scripts/check-secrets.sh",
 )
 
+GATES = "$RUNNER_TEMP/binah-base"
+KIT_PATHS = (
+    *REQUIRED,
+    "scripts/lib/common.sh",
+    "policy/branch-name.regex",
+    "policy/secret-allowlist",
+    "policy/integration-branches",
+)
+
 # This sentence is the Merging rule in rules.md. tests/test-policy-sync.sh
 # fails when the two copies differ.
 ONE_PULL_SENTENCE = (
     "One pull request is one job. A later pull request merged into a pull that is still open fails that pull. "
     "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in `policy/backlog-recovery`. "
-    "The integration pull request (`refactor/run-*`) is where those merges land, so it is not that failure. "
-    "A fold passes only when `policy/backlog-recovery` on the pull's base branch lists this pull's number. "
-    "The check reads that file with `git show` of `origin/<base>:policy/backlog-recovery` and never the pull's head. "
+    "The integration pull request is where those merges land, so it is not that failure. "
+    "Its name is read from `policy/integration-branches` (one exact name or glob per line). "
+    "A missing file means the numbered `refactor/run-<nn>` names. "
+    "A fold passes only when `policy/backlog-recovery` on the default branch lists this pull's number. "
+    "The check reads that file with `git show` of `origin/<default>:policy/backlog-recovery` and never the pull's head. "
     "A missing file or a failed read counts as not listed. "
     "Adding a number to `policy/backlog-recovery` is Tier A (editing guardrail files) and needs Jhonny's approval. "
     "The label approach was dropped because agents hold Jhonny's credentials. "
@@ -54,37 +65,52 @@ PLANNED_LINE = re.compile(
 def steps_block(indent: str) -> str:
     key = indent + "  "
     nested = indent + "    "
+    on_pull = f"{key}if: github.event_name == 'pull_request'"
+    number = f"{nested}PR_NUMBER: " + "'${{ github.event.pull_request.number }}'"
+    token = f"{nested}GH_TOKEN: " + "'${{ github.token }}'"
     lines = [
         f"{indent}# BEGIN binah hygiene",
-        f"{indent}- name: check out base",
-        f"{key}if: github.event_name == 'pull_request'",
-        f"{key}run: |",
-        nested + 'git fetch --depth 1 origin "${{ github.base_ref }}"',
-        nested + 'git worktree add --detach "$RUNNER_TEMP/binah-base" FETCH_HEAD',
-        f"{indent}- name: branch name",
-        f"{key}if: github.event_name == 'pull_request'",
-        f"{key}run: "
-        + "'bash \"$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh\" \"${{ github.head_ref }}\"'",
-        f"{indent}- name: pull request body",
-        f"{key}if: github.event_name == 'pull_request'",
+        f"{indent}- name: check out gates",
+        on_pull,
         f"{key}env:",
-        f"{nested}GH_TOKEN: " + "'${{ github.token }}'",
+        f"{nested}DEFAULT_BRANCH: " + "'${{ github.event.repository.default_branch }}'",
+        f"{key}run: |",
+        nested + 'git fetch --depth 1 origin "$DEFAULT_BRANCH"',
+        nested + f'git worktree add --detach "{GATES}" FETCH_HEAD',
+        nested + "for rel in " + " ".join(KIT_PATHS) + "; do",
+        nested + f'  if [ ! -e "{GATES}/$rel" ] && [ -e "$rel" ]; then',
+        nested + f'    mkdir -p "$(dirname "{GATES}/$rel")"',
+        nested + f'    cp "$rel" "{GATES}/$rel"',
+        nested + "    printf '::warning::%s is not on %s yet, so this pull grades itself with its own copy\\n' \"$rel\" \"$DEFAULT_BRANCH\"",
+        nested + "  fi",
+        nested + "done",
+        f"{indent}- name: branch name",
+        on_pull,
+        f"{key}env:",
+        f"{nested}HEAD_REF: " + "'${{ github.head_ref }}'",
+        f"{key}run: |",
+        nested + f'bash "{GATES}/scripts/check-branch-name.sh" "$HEAD_REF"',
+        f"{indent}- name: pull request body",
+        on_pull,
+        f"{key}env:",
+        token,
+        number,
         f"{key}run: |",
         nested + 'body="${RUNNER_TEMP}/pr-body.md"',
-        nested + 'number="${{ github.event.pull_request.number }}"',
-        nested + 'gh pr view "$number" --json body --jq .body >"$body"',
-        nested + "mapfile -t files < <(gh pr view \"$number\" --json files --jq '.files[].path')",
-        nested + 'bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh" "$body" "${files[@]}"',
+        nested + 'gh pr view "$PR_NUMBER" --json body --jq .body >"$body"',
+        nested + "mapfile -t files < <(gh pr view \"$PR_NUMBER\" --json files --jq '.files[].path')",
+        nested + f'bash "{GATES}/scripts/check-pr-body.sh" "$body" "${{files[@]}}"',
         f"{indent}- name: one pull request, one job",
-        f"{key}if: github.event_name == 'pull_request'",
+        on_pull,
         f"{key}env:",
-        f"{nested}GH_TOKEN: " + "'${{ github.token }}'",
-        f"{key}run: "
-        + "'bash \"$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh\" --repo \"${{ github.repository }}\" --number \"${{ github.event.pull_request.number }}\"'",
+        token,
+        number,
+        f"{key}run: |",
+        nested + f'bash "{GATES}/scripts/check-one-pr.sh" --repo "$GITHUB_REPOSITORY" --number "$PR_NUMBER"',
         f"{indent}- name: secret scan",
         f"{key}run: |",
-        nested + 'if [ "${{ github.event_name }}" = "pull_request" ]; then',
-        nested + '  bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh" "$GITHUB_WORKSPACE"',
+        nested + 'if [ "$GITHUB_EVENT_NAME" = pull_request ]; then',
+        nested + f'  bash "{GATES}/scripts/check-secrets.sh" "$GITHUB_WORKSPACE"',
         nested + "else",
         nested + "  bash scripts/check-secrets.sh",
         nested + "fi",
@@ -340,18 +366,36 @@ def missing_scripts(root: Path) -> list[str]:
         return ["hygiene job", *REQUIRED]
     _path, lines, span = found
     body = "".join(lines[span["start"] : span["end"]])
-    missing = [script for script in REQUIRED if script not in body]
-    if "fetch-depth: 0" in steps_region(body):
+    live = "\n".join(YAML_COMMENT.sub("", line) for line in body.splitlines())
+    missing = [script for script in REQUIRED if f"binah-base/{script}" not in live]
+    if checkout_requests_history(lines, span):
         missing.append("fetch-depth: 0 history scan is enabled")
     return missing
 
 
-def steps_region(body: str) -> str:
-    begin = body.find("# BEGIN binah hygiene")
-    end = body.find("# END binah hygiene")
-    if begin == -1 or end == -1:
-        return ""
-    return body[begin:end]
+CHECKOUT_USES = re.compile(r"""\buses["']?\s*:\s*["']?actions/checkout@""")
+FULL_HISTORY = re.compile(r"""fetch-depth["']?\s*:\s*["']?0["']?\s*([,}]|$)""", re.MULTILINE)
+YAML_COMMENT = re.compile(r"(^|\s)#.*$")
+
+
+def checkout_requests_history(lines: list[str], span: dict) -> bool:
+    step_indent = None
+    starts = []
+    for index in range(span["start"], span["end"]):
+        match = re.match(r"^( +)- ", lines[index])
+        if not match or len(match.group(1)) <= span["indent"]:
+            continue
+        indent = len(match.group(1))
+        if step_indent is None:
+            step_indent = indent
+        if indent == step_indent:
+            starts.append(index)
+    starts.append(span["end"])
+    for start, end in zip(starts, starts[1:]):
+        text = "\n".join(YAML_COMMENT.sub("", line.rstrip("\n")) for line in lines[start:end])
+        if CHECKOUT_USES.search(text) and FULL_HISTORY.search(text):
+            return True
+    return False
 
 
 def main() -> None:
