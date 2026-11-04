@@ -226,7 +226,9 @@ cat >"$tmp/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
   "repo view acme/app --json defaultBranchRef --jq .defaultBranchRef.name") printf 'main\n' ;;
-  "pr list --repo acme/app "*) printf '%s\n' '[{"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one"}]' ;;
+  "pr view 1 --repo acme/app "*) printf '%s\n' '{"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one"}' ;;
+  "api --paginate --slurp "*) printf '%s\n' '[[]]' ;;
+  "pr list --repo acme/app --state merged "*) printf '%s\n' '[]' ;;
   *) printf 'unexpected gh: %s\n' "$*" >&2; exit 1 ;;
 esac
 EOF
@@ -240,6 +242,54 @@ git -C "$repo" update-ref -d refs/remotes/origin/main
     exit 1
   fi
 )
+
+# The live query asks for open pulls and for merged pulls based on this head.
+# It does not list every pull in the repository.
+log=$tmp/gh.log
+mkdir -p "$tmp/bin"
+cat >"$tmp/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$GH_LOG"
+if [[ $* == 'repo view '* ]]; then
+  printf 'main\n'
+  exit 0
+fi
+if [[ $* == *'pr view'* ]]; then
+  printf '%s\n' '{"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one","isDraft":false}'
+  exit 0
+fi
+if [[ $* == *'state=open'* ]]; then
+  printf '%s\n' '[[{"number":1,"state":"open","created_at":"2026-10-01T00:00:00Z","draft":false,"base":{"ref":"main"},"head":{"ref":"feat/one"}}]]'
+  exit 0
+fi
+if [[ $* == *'--base feat/one'* ]]; then
+  printf '%s\n' '[{"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two","isDraft":false}]'
+  exit 0
+fi
+printf 'unexpected gh: %s\n' "$*" >&2
+exit 1
+EOF
+chmod +x "$tmp/bin/gh"
+git init -q "$tmp/empty"
+if (cd "$tmp/empty" && GH_LOG=$log PATH="$tmp/bin:$PATH" "$check" --repo acme/app --number 1) >/dev/null 2>"$tmp/err"; then
+  printf 'a merged child from the narrow query should fail\n' >&2
+  exit 1
+fi
+if ! grep -q 'later pull request #2' "$tmp/err"; then
+  printf 'narrow query did not report the merged child:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+if grep -q -- '--state all' "$log" || grep -q -- '--limit 200' "$log" || grep -q -- '--search' "$log"; then
+  printf 'live query lists every pull, or relies on the search index:\n' >&2
+  cat "$log" >&2
+  exit 1
+fi
+if ! grep -q 'state=open' "$log" || ! grep -q -- '--base feat/one' "$log"; then
+  printf 'live query did not ask for open pulls and merged pulls on this head:\n' >&2
+  cat "$log" >&2
+  exit 1
+fi
 
 rm -rf "$tmp"
 printf 'one pr ok\n'

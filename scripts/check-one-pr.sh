@@ -61,8 +61,63 @@ if [[ -z $prs ]]; then
   prs=$(mktemp)
   owned=1
   live=1
-  gh pr list --repo "$repo" --state all --limit 200 \
-    --json number,state,createdAt,baseRefName,headRefName,isDraft >"$prs"
+  view=$(mktemp)
+  open=$(mktemp)
+  merged=$(mktemp)
+  gh pr view "$number" --repo "$repo" \
+    --json number,state,createdAt,baseRefName,headRefName,isDraft >"$view"
+  head_ref=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["headRefName"])' "$view")
+  gh api --paginate --slurp "repos/${repo}/pulls?state=open&per_page=100" >"$open"
+  gh pr list --repo "$repo" --state merged --base "$head_ref" --limit 1000 \
+    --json number,state,createdAt,baseRefName,headRefName,isDraft >"$merged"
+  python3 - "$view" "$open" "$merged" >"$prs" <<'PY'
+import json
+import sys
+
+
+def flatten(data):
+    if isinstance(data, dict):
+        return [data]
+    rows = []
+    for item in data:
+        if isinstance(item, list):
+            rows.extend(item)
+        elif isinstance(item, dict):
+            rows.append(item)
+    return rows
+
+
+def row(item):
+    if "headRefName" in item or "baseRefName" in item:
+        base = item.get("baseRefName") or ""
+        head = item.get("headRefName") or ""
+        created = item.get("createdAt") or ""
+        draft = item.get("isDraft")
+    else:
+        base = (item.get("base") or {}).get("ref") or ""
+        head = (item.get("head") or {}).get("ref") or ""
+        created = item.get("created_at") or ""
+        draft = item.get("draft")
+    return {
+        "number": int(item["number"]),
+        "state": str(item.get("state") or "").upper(),
+        "createdAt": created,
+        "baseRefName": base,
+        "headRefName": head,
+        "isDraft": bool(draft),
+    }
+
+
+seen = {}
+for path in sys.argv[1:]:
+    for item in flatten(json.load(open(path))):
+        if "number" not in item:
+            continue
+        pulled = row(item)
+        seen[pulled["number"]] = pulled
+json.dump(list(seen.values()), sys.stdout)
+PY
+  rm -f "$view" "$open" "$merged"
   if [[ -z $default_branch ]]; then
     default_branch=$(gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name)
   fi
