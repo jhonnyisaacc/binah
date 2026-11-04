@@ -190,6 +190,102 @@ write '[
 ]'
 expect_pass 2
 
+# A brief-named integration branch is exempt only when the policy file lists it.
+kit=$tmp/kit
+mkdir -p "$kit/scripts" "$kit/policy"
+cp "$check" "$kit/scripts/check-one-pr.sh"
+chmod +x "$kit/scripts/check-one-pr.sh"
+named=$kit/scripts/check-one-pr.sh
+printf 'refactor/run-*\nfeat/davar-v2\n' >"$kit/policy/integration-branches"
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/davar-v2"},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/davar-v2","headRefName":"feat/child"}
+]'
+if ! "$named" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+  printf 'feat/davar-v2 should be an integration branch:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+# A comment is not a listing. The same head then fails.
+printf '# feat/davar-v2\nrefactor/run-*\n' >"$kit/policy/integration-branches"
+if "$named" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+  printf 'an unlisted branch must not be integration\n' >&2
+  exit 1
+fi
+
+for name in refactor/run-cleanup refactor/run-loop-tidy refactor/run-01/x; do
+  write '[
+    {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"'"$name"'"},
+    {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"'"$name"'","headRefName":"feat/a"}
+  ]'
+  expect_fail 1 'later pull request #2'
+done
+for policy in shipped missing; do
+  if [[ $policy == shipped ]]; then
+    cp "$root/policy/integration-branches" "$kit/policy/integration-branches"
+  else
+    rm -f "$kit/policy/integration-branches"
+  fi
+  write '[
+    {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"refactor/run-cleanup"},
+    {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"refactor/run-cleanup","headRefName":"feat/a"}
+  ]'
+  if "$kit/scripts/check-one-pr.sh" --prs "$tmp/prs.json" --number 1 >/dev/null 2>&1; then
+    printf 'refactor/run-cleanup must not count as an integration branch (%s policy)\n' "$policy" >&2
+    exit 1
+  fi
+done
+# Missing file defaults to refactor/run-*.
+rm -f "$kit/policy/integration-branches"
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"refactor/run-01"},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"refactor/run-01","headRefName":"feat/a"}
+]'
+if ! "$named" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+  printf 'a missing policy file should still allow refactor/run-*:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+# The named branch stops the stack walk and is left out of the open cap.
+printf 'feat/davar-v2\n' >"$kit/policy/integration-branches"
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/davar-v2"},
+  {"number":2,"state":"OPEN","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/davar-v2","headRefName":"feat/b"},
+  {"number":3,"state":"OPEN","createdAt":"2026-10-03T00:00:00Z","baseRefName":"feat/b","headRefName":"feat/c"}
+]'
+if ! "$named" --prs "$tmp/prs.json" --number 3 >/dev/null 2>"$tmp/err"; then
+  printf 'a chain that reaches feat/davar-v2 should stay within depth 2:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+open='['
+for n in 1 2 3 4 5 6; do
+  open+=$(printf '{"number":%s,"state":"OPEN","createdAt":"2026-10-0%sT00:00:00Z","baseRefName":"feat/davar-v2","headRefName":"feat/p%s"},' "$n" "$n" "$n")
+done
+open+='{"number":7,"state":"OPEN","createdAt":"2026-09-01T00:00:00Z","baseRefName":"main","headRefName":"feat/davar-v2"}]'
+write "$open"
+if ! "$named" --prs "$tmp/prs.json" --number 7 >/dev/null 2>"$tmp/err"; then
+  printf 'named integration pull should not count toward the open cap:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+if ! "$named" --prs "$tmp/prs.json" --number 5 >/dev/null 2>"$tmp/err"; then
+  printf 'fifth feature pull should pass beside a named integration pull:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+if "$named" --prs "$tmp/prs.json" --number 6 >/dev/null 2>"$tmp/err"; then
+  printf 'sixth feature pull should fail beside a named integration pull\n' >&2
+  exit 1
+fi
+if ! grep -q 'pull #6 is the 6th open pull; the limit is 5' "$tmp/err"; then
+  printf 'open-cap error should name pull #6:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
 # The rule text is not the check. The script has to exit non-zero.
 printf 'One pull request is one job. Stack depth at most 2.\n' >"$tmp/sentence.txt"
 if "$check" --prs "$tmp/sentence.txt" --number 1 >/dev/null 2>"$tmp/err"; then

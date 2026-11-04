@@ -19,7 +19,9 @@ REQUIRED = (
 ONE_PULL_SENTENCE = (
     "One pull request is one job. A later pull request merged into a pull that is still open fails that pull. "
     "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in `policy/backlog-recovery`. "
-    "The integration pull request (`refactor/run-*`) is where those merges land, so it is not that failure. "
+    "The integration pull request is where those merges land, so it is not that failure. "
+    "Its name is read from `policy/integration-branches` (one exact name or glob per line). "
+    "A missing file means the numbered `refactor/run-<nn>` names. "
     "A fold passes only when `policy/backlog-recovery` on the default branch lists this pull's number. "
     "The check reads that file with `git show` of `origin/<default>:policy/backlog-recovery` and never the pull's head. "
     "A missing file or a failed read counts as not listed. "

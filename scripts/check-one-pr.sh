@@ -10,7 +10,9 @@
 # and do not trip this.
 # Fails when stack depth is over 2, or this pull is the 6th or later open
 # pull request, not counting the integration pull request.
-# Merges into an open refactor/run-<nn> integration pull request are the
+# Integration names are read from policy/integration-branches next to this
+# script (one exact name or glob per line). A missing file means
+# the numbered refactor/run-<nn> names. Merges into an open integration pull request are the
 # run's normal merges, so that pull request is not the later-merge failure.
 set -euo pipefail
 
@@ -123,8 +125,12 @@ PY
   fi
 fi
 
+script_root=$(cd "$(dirname "$0")/.." && pwd)
+policy_file=$script_root/policy/integration-branches
+
 set +e
-python3 - "$prs" "$number" "$live" "${default_branch:-main}" <<'PY'
+python3 - "$prs" "$number" "$live" "${default_branch:-main}" "$policy_file" <<'PY'
+import fnmatch
 import json
 import re
 import subprocess
@@ -134,13 +140,36 @@ import sys
 # Open no new pull request: the oldest MAX_OPEN stay allowed.
 MAX_DEPTH = 2
 MAX_OPEN = 5
-INTEGRATION = re.compile(r"refactor/run-[0-9]+\Z")
+DEFAULT_INTEGRATION = (
+    "refactor/run-[0-9]",
+    "refactor/run-[0-9][0-9]",
+    "refactor/run-[0-9][0-9][0-9]",
+)
 BASE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 FOLD_NEXT = (
     "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in policy/backlog-recovery."
 )
 
-path, number, live, default_branch = sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1", sys.argv[4]
+path, number, live, default_branch, policy_path = (
+    sys.argv[1],
+    int(sys.argv[2]),
+    sys.argv[3] == "1",
+    sys.argv[4],
+    sys.argv[5],
+)
+
+
+def integration_patterns(policy):
+    try:
+        text = open(policy).read()
+    except OSError:
+        return DEFAULT_INTEGRATION
+    found = []
+    for line in text.splitlines():
+        body = line.split("#", 1)[0].strip()
+        if body:
+            found.append(body)
+    return tuple(found)
 try:
     data = json.load(open(path))
 except json.JSONDecodeError:
@@ -219,8 +248,11 @@ if current["state"] != "OPEN":
     sys.exit(0)
 
 
+patterns = integration_patterns(policy_path)
+
+
 def integration(name):
-    return INTEGRATION.fullmatch(name) is not None
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
 
 
 by_head = {pr["head"]: pr for pr in prs if pr["state"] == "OPEN"}
