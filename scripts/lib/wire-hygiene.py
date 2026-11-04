@@ -330,9 +330,29 @@ def missing_scripts(root: Path) -> list[str]:
     _path, lines, span = found
     body = "".join(lines[span["start"] : span["end"]])
     missing = [script for script in REQUIRED if script not in body]
-    if "fetch-depth: 0" in steps_region(body):
+    if "fetch-depth: 0" in steps_region(body) or checkout_requests_history(lines, span):
         missing.append("fetch-depth: 0 history scan is enabled")
     return missing
+
+
+def checkout_requests_history(lines: list[str], span: dict) -> bool:
+    step_indent = None
+    starts = []
+    for index in range(span["start"], span["end"]):
+        match = re.match(r"^( +)- ", lines[index])
+        if not match or len(match.group(1)) <= span["indent"]:
+            continue
+        indent = len(match.group(1))
+        if step_indent is None:
+            step_indent = indent
+        if indent == step_indent:
+            starts.append(index)
+    starts.append(span["end"])
+    for start, end in zip(starts, starts[1:]):
+        text = "".join(lines[start:end])
+        if "actions/checkout" in text and "fetch-depth: 0" in text:
+            return True
+    return False
 
 
 def steps_region(body: str) -> str:

@@ -187,5 +187,77 @@ mkdir -p "$caller"
 bash "$root/scripts/install-policy-kit.sh" "$caller" >/dev/null
 assert_wired "$caller"
 
+# fetch-depth: 0 on the hygiene checkout fails even when it sits outside the marker block.
+history=$tmp/history
+mkdir -p "$history/.github/workflows"
+cat >"$history/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on:
+  pull_request:
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # BEGIN binah hygiene
+      - name: branch name
+        run: bash scripts/check-branch-name.sh
+      - name: pull request body
+        run: bash scripts/check-pr-body.sh
+      - name: one pull request, one job
+        run: bash scripts/check-one-pr.sh
+      - name: secret scan
+        run: bash scripts/check-secrets.sh
+      # END binah hygiene
+EOF
+if bash "$install" --check "$history" >/dev/null 2>"$tmp/err"; then
+  printf 'fetch-depth: 0 on the hygiene checkout should fail\n' >&2
+  exit 1
+fi
+if ! grep -q 'fetch-depth: 0' "$tmp/err"; then
+  printf 'checkout history error should name fetch-depth: 0\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+# The same text in another job is not the hygiene checkout.
+shallow=$tmp/shallow
+mkdir -p "$shallow/.github/workflows"
+cat >"$shallow/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on:
+  pull_request:
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      # BEGIN binah hygiene
+      - name: branch name
+        run: bash scripts/check-branch-name.sh
+      - name: pull request body
+        run: bash scripts/check-pr-body.sh
+      - name: one pull request, one job
+        run: bash scripts/check-one-pr.sh
+      - name: secret scan
+        run: bash scripts/check-secrets.sh
+      # END binah hygiene
+  other:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+EOF
+if ! bash "$install" --check "$shallow" >/dev/null 2>"$tmp/err"; then
+  printf 'fetch-depth: 0 outside the hygiene job should not fail:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
 rm -rf "$tmp"
 printf 'binah-install ok\n'
