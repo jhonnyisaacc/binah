@@ -197,5 +197,49 @@ if "$check" --prs "$tmp/sentence.txt" --number 1 >/dev/null 2>"$tmp/err"; then
   exit 1
 fi
 
+repo=$(new_repo fold-chosen-base)
+git -C "$repo" checkout -q -b feat/recovery
+mkdir -p "$repo/policy"
+printf '1\n' >"$repo/policy/backlog-recovery"
+git -C "$repo" add policy/backlog-recovery
+commit_repo "$repo" 'list on a branch the pull chose'
+git -C "$repo" push -q origin feat/recovery
+git -C "$repo" fetch -q origin
+write '[
+  {"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"feat/recovery","headRefName":"feat/one"},
+  {"number":2,"state":"MERGED","createdAt":"2026-10-02T00:00:00Z","baseRefName":"feat/one","headRefName":"feat/two"}
+]'
+(
+  cd "$repo"
+  if "$check" --prs "$tmp/prs.json" --number 1 >/dev/null 2>"$tmp/err"; then
+    printf 'a listing on a base the pull chose must not grant a fold\n' >&2
+    exit 1
+  fi
+)
+
+repo=$(new_repo fold-live)
+git -C "$repo" remote set-url origin "file://$tmp/bare-fold-live"
+git -C "$repo" -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q --allow-empty -m second
+git -C "$repo" push -q origin main
+mkdir -p "$tmp/bin"
+cat >"$tmp/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "repo view acme/app --json defaultBranchRef --jq .defaultBranchRef.name") printf 'main\n' ;;
+  "pr list --repo acme/app "*) printf '%s\n' '[{"number":1,"state":"OPEN","createdAt":"2026-10-01T00:00:00Z","baseRefName":"main","headRefName":"feat/one"}]' ;;
+  *) printf 'unexpected gh: %s\n' "$*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$tmp/bin/gh"
+git -C "$repo" update-ref -d refs/remotes/origin/main
+(
+  cd "$repo"
+  PATH="$tmp/bin:$PATH" "$check" --repo acme/app --number 1
+  if [[ $(git rev-parse --is-shallow-repository) != false ]]; then
+    printf 'a live run made a full clone shallow\n' >&2
+    exit 1
+  fi
+)
+
 rm -rf "$tmp"
 printf 'one pr ok\n'
