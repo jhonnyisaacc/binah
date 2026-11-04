@@ -37,6 +37,20 @@ assert_wired() {
     printf 'a new hygiene workflow should check out the current tree\n' >&2
     exit 1
   fi
+  if ! grep -q 'RUNNER_TEMP/binah-base' "$wf"; then
+    printf 'hygiene does not check the base out into a separate directory\n' >&2
+    exit 1
+  fi
+  for script in scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh; do
+    if ! grep -q "binah-base/$script" "$wf"; then
+      printf 'hygiene does not run %s from the base checkout\n' "$script" >&2
+      exit 1
+    fi
+  done
+  if ! grep -q 'GITHUB_WORKSPACE' "$wf"; then
+    printf 'the secret scan should read the pull tree\n' >&2
+    exit 1
+  fi
   if ! bash "$install" --check "$dest"; then
     printf 'binah-install --check should pass\n' >&2
     exit 1

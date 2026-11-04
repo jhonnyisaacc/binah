@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
-# Scan the current tree for secrets. This does not read git history.
+# Scan one tree for secrets. This does not read git history.
+# The allowlist is policy/secret-allowlist next to this script, never a file
+# in the tree being scanned. With no argument the script's own tree is scanned.
 # A history-scanning Gitleaks job (gitleaks over every commit, fetch-depth: 0)
 # stays off until this scan passes and fixture paths are listed in
 # policy/secret-allowlist. Do not enable that job by default.
 set -euo pipefail
 
-if [[ $# -gt 0 ]]; then
-  printf 'usage: check-secrets.sh\n' >&2
-  printf 'scans the current tree only; history scanning is not enabled\n' >&2
+script_root=$(cd "$(dirname "$0")/.." && pwd)
+if [[ $# -gt 1 ]]; then
+  printf 'usage: check-secrets.sh [tree]\n' >&2
+  printf 'scans one tree only; history scanning is not enabled\n' >&2
   exit 2
 fi
+if [[ $# -eq 1 ]]; then
+  scan_root=$(cd "$1" && pwd)
+else
+  scan_root=$script_root
+fi
 
-root=$(cd "$(dirname "$0")/.." && pwd)
-exec python3 - "$root" <<'PY'
+exec python3 - "$script_root" "$scan_root" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-root = Path(sys.argv[1])
-allow_path = root / "policy" / "secret-allowlist"
+script_root = Path(sys.argv[1])
+scan_root = Path(sys.argv[2])
+allow_path = script_root / "policy" / "secret-allowlist"
 patterns = [
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
@@ -51,12 +59,12 @@ def allowed(rel: str, rules: list[str]) -> bool:
 
 rules = load_allow()
 hits = []
-for path in sorted(root.rglob("*")):
+for path in sorted(scan_root.rglob("*")):
     if not path.is_file():
         continue
-    if any(part in skip_dirs for part in path.relative_to(root).parts):
+    if any(part in skip_dirs for part in path.relative_to(scan_root).parts):
         continue
-    rel = path.relative_to(root).as_posix()
+    rel = path.relative_to(scan_root).as_posix()
     if allowed(rel, rules):
         continue
     if path.stat().st_size > 1_000_000:

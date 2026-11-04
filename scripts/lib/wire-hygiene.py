@@ -56,9 +56,15 @@ def steps_block(indent: str) -> str:
     nested = indent + "    "
     lines = [
         f"{indent}# BEGIN binah hygiene",
+        f"{indent}- name: check out base",
+        f"{key}if: github.event_name == 'pull_request'",
+        f"{key}run: |",
+        nested + 'git fetch --depth 1 origin "${{ github.base_ref }}"',
+        nested + 'git worktree add --detach "$RUNNER_TEMP/binah-base" FETCH_HEAD',
         f"{indent}- name: branch name",
         f"{key}if: github.event_name == 'pull_request'",
-        f"{key}run: " + "'bash scripts/check-branch-name.sh \"${{ github.head_ref }}\"'",
+        f"{key}run: "
+        + "'bash \"$RUNNER_TEMP/binah-base/scripts/check-branch-name.sh\" \"${{ github.head_ref }}\"'",
         f"{indent}- name: pull request body",
         f"{key}if: github.event_name == 'pull_request'",
         f"{key}env:",
@@ -68,15 +74,20 @@ def steps_block(indent: str) -> str:
         nested + 'number="${{ github.event.pull_request.number }}"',
         nested + 'gh pr view "$number" --json body --jq .body >"$body"',
         nested + "mapfile -t files < <(gh pr view \"$number\" --json files --jq '.files[].path')",
-        nested + 'bash scripts/check-pr-body.sh "$body" "${files[@]}"',
+        nested + 'bash "$RUNNER_TEMP/binah-base/scripts/check-pr-body.sh" "$body" "${files[@]}"',
         f"{indent}- name: one pull request, one job",
         f"{key}if: github.event_name == 'pull_request'",
         f"{key}env:",
         f"{nested}GH_TOKEN: " + "'${{ github.token }}'",
         f"{key}run: "
-        + "'bash scripts/check-one-pr.sh --repo \"${{ github.repository }}\" --number \"${{ github.event.pull_request.number }}\"'",
+        + "'bash \"$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh\" --repo \"${{ github.repository }}\" --number \"${{ github.event.pull_request.number }}\"'",
         f"{indent}- name: secret scan",
-        f"{key}run: bash scripts/check-secrets.sh",
+        f"{key}run: |",
+        nested + 'if [ "${{ github.event_name }}" = "pull_request" ]; then',
+        nested + '  bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh" "$GITHUB_WORKSPACE"',
+        nested + "else",
+        nested + "  bash scripts/check-secrets.sh",
+        nested + "fi",
         f"{indent}# END binah hygiene",
     ]
     return "\n".join(lines) + "\n"
