@@ -18,11 +18,12 @@ if ! grep -F -q -- "$email" "$root/setup/signing.md"; then
   printf 'setup/signing.md does not name the author email from policy/author\n' >&2
   exit 1
 fi
-if ! head -n 1 "$root/rules.md" | grep -F -q 'v4.7'; then
-  printf 'rules.md header is not v4.7\n' >&2
+version=$(sed -n '1s/.*(v\([0-9.]*\),.*/\1/p' "$root/rules.md")
+if [[ -z $version ]]; then
+  printf 'rules.md header has no version\n' >&2
   exit 1
 fi
-if ! grep -F -q 'Version: 4.7 (matches rules.md).' "$root/merge-playbook.md"; then
+if ! grep -F -q "Version: ${version} (matches rules.md)." "$root/merge-playbook.md"; then
   printf 'merge-playbook.md version does not match rules.md\n' >&2
   exit 1
 fi

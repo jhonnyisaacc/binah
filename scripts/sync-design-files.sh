@@ -9,7 +9,10 @@ if ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
   exit 1
 fi
 
-mapfile -t files < <(git ls-tree -r --name-only "$base" | grep -E '(^|/)design/|\.pen$' || true)
+files=()
+while IFS= read -r line || [[ -n $line ]]; do
+  files+=("$line")
+done < <(git ls-tree -r --name-only "$base" | grep -E '(^|/)design/|\.pen$' || true)
 
 if [[ ${#files[@]} -eq 0 ]]; then
   printf 'sync-design-files: no design files on %s\n' "$base"

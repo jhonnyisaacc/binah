@@ -76,6 +76,9 @@ fi
 if [[ ! -f $target/policy/backlog-recovery ]]; then
   copy_file "$src/policy/backlog-recovery" "$target/policy/backlog-recovery"
 fi
+if [[ ! -f $target/policy/integration-branches ]]; then
+  copy_file "$src/policy/integration-branches" "$target/policy/integration-branches"
+fi
 if [[ -f $src/scripts/sync-design-files.sh ]]; then
   copy_file "$src/scripts/sync-design-files.sh" "$target/scripts/sync-design-files.sh"
 fi

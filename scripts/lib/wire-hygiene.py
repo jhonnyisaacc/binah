@@ -19,9 +19,11 @@ REQUIRED = (
 ONE_PULL_SENTENCE = (
     "One pull request is one job. A later pull request merged into a pull that is still open fails that pull. "
     "Redo per merge-playbook.md section 10, or ask Jhonny to list the pull in `policy/backlog-recovery`. "
-    "The integration pull request (`refactor/run-*`) is where those merges land, so it is not that failure. "
-    "A fold passes only when `policy/backlog-recovery` on the pull's base branch lists this pull's number. "
-    "The check reads that file with `git show` of `origin/<base>:policy/backlog-recovery` and never the pull's head. "
+    "The integration pull request is where those merges land, so it is not that failure. "
+    "Its name is read from `policy/integration-branches` (one exact name or glob per line). "
+    "A missing file means the numbered `refactor/run-<nn>` names. "
+    "A fold passes only when `policy/backlog-recovery` on the default branch lists this pull's number. "
+    "The check reads that file with `git show` of `origin/<default>:policy/backlog-recovery` and never the pull's head. "
     "A missing file or a failed read counts as not listed. "
     "Adding a number to `policy/backlog-recovery` is Tier A (editing guardrail files) and needs Jhonny's approval. "
     "The label approach was dropped because agents hold Jhonny's credentials. "
@@ -330,9 +332,14 @@ def missing_scripts(root: Path) -> list[str]:
     _path, lines, span = found
     body = "".join(lines[span["start"] : span["end"]])
     missing = [script for script in REQUIRED if script not in body]
-    if "fetch-depth: 0" in steps_region(body) or checkout_requests_history(lines, span):
+    if checkout_requests_history(lines, span):
         missing.append("fetch-depth: 0 history scan is enabled")
     return missing
+
+
+CHECKOUT_USES = re.compile(r"""\buses["']?\s*:\s*["']?actions/checkout@""")
+FULL_HISTORY = re.compile(r"""fetch-depth["']?\s*:\s*["']?0["']?\s*([,}]|$)""", re.MULTILINE)
+YAML_COMMENT = re.compile(r"(^|\s)#.*$")
 
 
 def checkout_requests_history(lines: list[str], span: dict) -> bool:
@@ -349,18 +356,10 @@ def checkout_requests_history(lines: list[str], span: dict) -> bool:
             starts.append(index)
     starts.append(span["end"])
     for start, end in zip(starts, starts[1:]):
-        text = "".join(lines[start:end])
-        if "actions/checkout" in text and "fetch-depth: 0" in text:
+        text = "\n".join(YAML_COMMENT.sub("", line.rstrip("\n")) for line in lines[start:end])
+        if CHECKOUT_USES.search(text) and FULL_HISTORY.search(text):
             return True
     return False
-
-
-def steps_region(body: str) -> str:
-    begin = body.find("# BEGIN binah hygiene")
-    end = body.find("# END binah hygiene")
-    if begin == -1 or end == -1:
-        return ""
-    return body[begin:end]
 
 
 def main() -> None:

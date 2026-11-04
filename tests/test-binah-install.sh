@@ -56,6 +56,10 @@ if [[ ! -f $fresh/policy/backlog-recovery ]]; then
   printf 'install did not copy policy/backlog-recovery\n' >&2
   exit 1
 fi
+if ! grep -q -F 'refactor/run-[0-9][0-9]' "$fresh/policy/integration-branches"; then
+  printf 'install did not copy the default integration branch\n' >&2
+  exit 1
+fi
 assert_wired "$fresh"
 if [[ $(grep -c '^  hygiene:' "$fresh/.github/workflows/hygiene.yml") -ne 1 ]]; then
   printf 'a new repo should get one hygiene job\n' >&2
@@ -91,6 +95,7 @@ mkdir -p "$existing/.github/workflows"
 git init -q "$existing"
 mkdir -p "$existing/policy"
 printf '99\n' >"$existing/policy/backlog-recovery"
+printf 'feat/davar-v2\n' >"$existing/policy/integration-branches"
 cat >"$existing/.github/workflows/ci.yml" <<'EOF'
 name: CI
 on:
@@ -129,6 +134,10 @@ if ! grep -q 'echo other' "$existing/.github/workflows/ci.yml"; then
 fi
 if [[ $(cat "$existing/policy/backlog-recovery") != '99' ]]; then
   printf 'install replaced an existing policy/backlog-recovery\n' >&2
+  exit 1
+fi
+if [[ $(cat "$existing/policy/integration-branches") != 'feat/davar-v2' ]]; then
+  printf 'install replaced an existing policy/integration-branches\n' >&2
   exit 1
 fi
 if grep -F -q 'pull request body (planned)' "$existing/rules.md"; then
@@ -258,6 +267,57 @@ if ! bash "$install" --check "$shallow" >/dev/null 2>"$tmp/err"; then
   cat "$tmp/err" >&2
   exit 1
 fi
+
+write_checkout() {
+  local dir=$1
+  local step=$2
+  mkdir -p "$dir/.github/workflows"
+  {
+    printf 'name: CI\non:\n  pull_request:\njobs:\n  hygiene:\n    runs-on: ubuntu-latest\n    steps:\n'
+    printf '%s\n' "$step"
+    printf '      # BEGIN binah hygiene\n'
+    printf '      - name: branch name\n        run: bash scripts/check-branch-name.sh\n'
+    printf '      - name: pull request body\n        run: bash scripts/check-pr-body.sh\n'
+    printf '      - name: one pull request, one job\n        run: bash scripts/check-one-pr.sh\n'
+    printf '      - name: secret scan\n        run: bash scripts/check-secrets.sh\n'
+    printf '      # END binah hygiene\n'
+  } >"$dir/.github/workflows/ci.yml"
+}
+
+case_number=0
+for step in \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: "0"' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: \'0\'' \
+  $'      - uses: actions/checkout@v4\n        with:\n          "fetch-depth": 0' \
+  $'      - uses: actions/checkout@v4\n        with: {fetch-depth: 0}' \
+  $'      - uses: actions/checkout@v4\n        with: {fetch-depth: 0, ref: main}' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 0 # all history' \
+  $'      - name: check out\n        uses: "actions/checkout@v4"\n        with:\n          fetch-depth: 0'; do
+  case_number=$((case_number + 1))
+  dir=$tmp/depth-bad-$case_number
+  write_checkout "$dir" "$step"
+  if bash "$install" --check "$dir" >/dev/null 2>"$tmp/err"; then
+    printf 'full history checkout should fail:\n%s\n' "$step" >&2
+    exit 1
+  fi
+done
+
+case_number=0
+for step in \
+  $'      - uses: actions/checkout@v4\n        with:\n          # fetch-depth: 0 was too slow\n          fetch-depth: 1' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 1 # not fetch-depth: 0' \
+  $'      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 10' \
+  $'      - name: notes about actions/checkout\n        run: echo "fetch-depth: 0"' \
+  $'      # uses: actions/checkout@v3 with fetch-depth: 0\n      - uses: actions/checkout@v4'; do
+  case_number=$((case_number + 1))
+  dir=$tmp/depth-ok-$case_number
+  write_checkout "$dir" "$step"
+  if ! bash "$install" --check "$dir" >/dev/null 2>"$tmp/err"; then
+    printf 'this checkout should pass:\n%s\n' "$step" >&2
+    cat "$tmp/err" >&2
+    exit 1
+  fi
+done
 
 rm -rf "$tmp"
 printf 'binah-install ok\n'
