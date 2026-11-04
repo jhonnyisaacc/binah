@@ -35,7 +35,7 @@ It takes about 40 seconds and needs `python3` (3.9 or later), `git`, `jq`, and `
 
 A `STALE` line means the script changed since the sync commit, so reread the model before trusting a pass.
 
-To prove the check can still fail, run `self_test.py` in the same folder. It takes about 2.5 minutes. Run it after you edit the model or the probe.
+To prove the check can still fail, run `self_test.py` in the same folder. It takes about 3 minutes. Run it after you edit the model or the probe.
 
 ## How it works
 
