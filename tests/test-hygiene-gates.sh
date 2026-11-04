@@ -151,14 +151,14 @@ downgraded=$tmp/downgraded
 mkdir -p "$downgraded/.github/workflows"
 sed 's#"$RUNNER_TEMP/binah-base/scripts/check-one-pr.sh"#scripts/check-one-pr.sh#' "$workflow" >"$downgraded/.github/workflows/hygiene.yml"
 if bash "$install" --check "$downgraded" >/dev/null 2>"$tmp/err"; then
-  printf '--check must fail a gate that runs from the pull\n' >&2
+  printf '%s\n' '--check must fail a gate that runs from the pull' >&2
   exit 1
 fi
 commented=$tmp/commented
 mkdir -p "$commented/.github/workflows"
 sed 's#^\( *\)bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh".*#\1\# bash "$RUNNER_TEMP/binah-base/scripts/check-secrets.sh"#' "$workflow" >"$commented/.github/workflows/hygiene.yml"
 if bash "$install" --check "$commented" >/dev/null 2>"$tmp/err"; then
-  printf '--check must not accept a gate named only in a comment\n' >&2
+  printf '%s\n' '--check must not accept a gate named only in a comment' >&2
   exit 1
 fi
 
