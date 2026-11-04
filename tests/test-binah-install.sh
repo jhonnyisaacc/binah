@@ -56,6 +56,10 @@ if [[ ! -f $fresh/policy/backlog-recovery ]]; then
   printf 'install did not copy policy/backlog-recovery\n' >&2
   exit 1
 fi
+if ! grep -q -F 'refactor/run-[0-9][0-9]' "$fresh/policy/integration-branches"; then
+  printf 'install did not copy the default integration branch\n' >&2
+  exit 1
+fi
 assert_wired "$fresh"
 if [[ $(grep -c '^  hygiene:' "$fresh/.github/workflows/hygiene.yml") -ne 1 ]]; then
   printf 'a new repo should get one hygiene job\n' >&2
@@ -91,6 +95,7 @@ mkdir -p "$existing/.github/workflows"
 git init -q "$existing"
 mkdir -p "$existing/policy"
 printf '99\n' >"$existing/policy/backlog-recovery"
+printf 'feat/davar-v2\n' >"$existing/policy/integration-branches"
 cat >"$existing/.github/workflows/ci.yml" <<'EOF'
 name: CI
 on:
@@ -129,6 +134,10 @@ if ! grep -q 'echo other' "$existing/.github/workflows/ci.yml"; then
 fi
 if [[ $(cat "$existing/policy/backlog-recovery") != '99' ]]; then
   printf 'install replaced an existing policy/backlog-recovery\n' >&2
+  exit 1
+fi
+if [[ $(cat "$existing/policy/integration-branches") != 'feat/davar-v2' ]]; then
+  printf 'install replaced an existing policy/integration-branches\n' >&2
   exit 1
 fi
 if grep -F -q 'pull request body (planned)' "$existing/rules.md"; then
