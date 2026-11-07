@@ -53,9 +53,12 @@ cp "$root/scripts/lib/common.sh" "$tmp/repo/scripts/lib/common.sh" 2>/dev/null |
 }
 cp "$root/policy/branch-name.regex" "$tmp/repo/policy/"
 cp "$root/.githooks/pre-push" "$tmp/repo/.githooks/pre-push"
+cp "$root/scripts/check-agent-layout.sh" "$tmp/repo/scripts/"
 chmod +x "$tmp/repo/.githooks/pre-push" "$tmp/repo/scripts/check-branch-name.sh"
+mkdir -p "$tmp/repo/.agents/skills" "$tmp/repo/.claude"
+ln -s ../.agents/skills "$tmp/repo/.claude/skills"
 echo a >"$tmp/repo/a"
-git -C "$tmp/repo" add a
+git -C "$tmp/repo" add a .claude/skills
 git -C "$tmp/repo" -c core.hooksPath=/dev/null commit -q -m init
 git -C "$tmp/repo" branch -M main
 git -C "$tmp/repo" config core.hooksPath .githooks
@@ -80,6 +83,21 @@ if git -C "$tmp/repo" push -q -u origin 'feat/bad.name' 2>"$tmp/err"; then
 fi
 if ! grep -q 'does not match' "$tmp/err"; then
   printf 'dotted branch error should name the regex\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+
+git -C "$tmp/repo" switch -q -c feat/cursor-skill
+mkdir -p "$tmp/repo/.cursor/skills/x"
+printf -- '---\nname: x\n---\n' >"$tmp/repo/.cursor/skills/x/SKILL.md"
+git -C "$tmp/repo" add .cursor
+git -C "$tmp/repo" -c core.hooksPath=/dev/null commit -q -m 'cursor skill'
+if git -C "$tmp/repo" push -q -u origin feat/cursor-skill 2>"$tmp/err"; then
+  printf 'a push with tracked .cursor/skills files should fail\n' >&2
+  exit 1
+fi
+if ! grep -q 'agent-layout: .cursor/skills holds 1 tracked files' "$tmp/err"; then
+  printf 'the layout failure should name .cursor/skills:\n' >&2
   cat "$tmp/err" >&2
   exit 1
 fi

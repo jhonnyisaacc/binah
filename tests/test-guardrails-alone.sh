@@ -79,6 +79,12 @@ done < <(cd "$kit" && find . -type f | sed 's#^\./##')
 rm -rf "$kit"
 pass "${installed[@]}" rules.md templates/expo-release/README.md
 
+pass .github/workflows/hygiene.yml scripts/check-agent-layout.sh \
+  .agents/skills/agent-preflight/SKILL.md .claude/skills \
+  .cursor/skills/agent-preflight/SKILL.md scripts/handoff-check.sh
+fail .agents/skills/verify/SKILL.md scripts/check-agent-layout.sh .agents/skills/verify/SKILL.md
+fail .claude/skills/verify/SKILL.md policy/author .claude/skills/verify/SKILL.md
+
 bin=$(mktemp -d)
 cat >"$bin/gh" <<'EOF'
 #!/usr/bin/env bash

@@ -5,7 +5,7 @@ description: Set Jhonny's git author, commit signing, and repo hooks before the 
 
 # Agent preflight
 
-Run this before the first commit in a repository that follows binah. The script is `scripts/agent-preflight.sh`. It reads `policy/author` and `policy/forbidden-trailers`, sets the author, turns signing on, and installs `.githooks`.
+Run this before the first commit in a repository that follows binah. The script is `scripts/agent-preflight.sh`. It reads `policy/author` and `policy/forbidden-trailers`, sets the author, turns signing on, sets `push.default` to `current`, and installs `.githooks`.
 
 The author is `jhonnyisaacc <60485595+jhonnyisaacc@users.noreply.github.com>`. Branch names match `policy/branch-name.regex`. A `Co-authored-by` trailer that names Cursor is removed. Other co-authors stay.
 
@@ -39,4 +39,4 @@ Before editing UI, run `bash scripts/sync-design-files.sh`. It checks out `*.pen
 
 ## What Refa copies into each repository
 
-`scripts/binah-install <repo>` is the install command. It copies the policy files, the hooks, this skill, the pull request template, the preflight script, and the hygiene checks, wires those checks into the repo's `hygiene` job, and then runs the kit. `scripts/install-policy-kit.sh` calls it. For a repository with an Expo app, pass `--mobile` so the Expo release check is copied too.
+`scripts/binah-install <repo>` is the install command. It copies the policy files, the hooks, this skill into `.agents/skills` with `.claude/skills` linked to it, the pull request template, the preflight script, and the hygiene checks, wires those checks into the repo's `hygiene` job, and then runs the kit. `scripts/install-policy-kit.sh` calls it. For a repository with an Expo app, pass `--mobile` so the Expo release check is copied too.

@@ -18,8 +18,9 @@ is_guardrail() {
 is_kit() {
   case $1 in
     .cursor/environment.json | .cursor/skills/agent-preflight/*) return 0 ;;
+    .agents/skills/agent-preflight/* | .claude/skills) return 0 ;;
     .githooks/* | .github/pull_request_template.md) return 0 ;;
-    scripts/agent-preflight.sh | scripts/sync-design-files.sh) return 0 ;;
+    scripts/agent-preflight.sh | scripts/sync-design-files.sh | scripts/handoff-check.sh) return 0 ;;
     templates/expo-release/* | rules.md) return 0 ;;
   esac
   return 1

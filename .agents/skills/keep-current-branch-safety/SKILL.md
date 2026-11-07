@@ -21,7 +21,7 @@ Run the check if you changed any of these:
 ## Run it
 
 ```bash
-python3 .claude/skills/keep-current-branch-safety/check.py
+python3 .agents/skills/keep-current-branch-safety/check.py
 ```
 
 It takes about a minute and needs `python3` (3.9 or later), `git`, `jq`, and `bash`. It installs nothing, uses no network, and never calls real GitHub.
