@@ -41,7 +41,9 @@ for f in \
   scripts/agent-preflight.sh \
   .githooks/commit-msg \
   .githooks/pre-push \
-  .cursor/skills/agent-preflight/SKILL.md \
+  scripts/check-agent-layout.sh \
+  scripts/handoff-check.sh \
+  .agents/skills/agent-preflight/SKILL.md \
   .cursor/environment.json
 do
   if [[ ! -f $dest/$f ]]; then
@@ -49,9 +51,24 @@ do
     exit 1
   fi
 done
-before=$(find "$dest" -type f -exec sha256sum {} \; | sort)
+if [[ $(readlink "$dest/.claude/skills") != ../.agents/skills ]]; then
+  printf 'kit did not link .claude/skills to ../.agents/skills\n' >&2
+  exit 1
+fi
+if [[ ! -f $dest/.claude/skills/agent-preflight/SKILL.md ]]; then
+  printf 'Claude Code cannot reach the agent-preflight skill through .claude/skills\n' >&2
+  exit 1
+fi
+if [[ -e $dest/.cursor/skills ]]; then
+  printf 'kit wrote under .cursor/skills\n' >&2
+  exit 1
+fi
+snapshot() {
+  (cd "$dest" && find . -path ./.git -prune -o \( -type f -exec sha256sum {} \; \) -o \( -type l -exec sh -c 'printf "%s -> %s\n" "$1" "$(readlink "$1")"' _ {} \; \) | sort)
+}
+before=$(snapshot)
 bash "$root/scripts/install-policy-kit.sh" "$dest" >/dev/null
-after=$(find "$dest" -type f -exec sha256sum {} \; | sort)
+after=$(snapshot)
 if [[ $before != "$after" ]]; then
   printf 'second install changed files\n' >&2
   exit 1

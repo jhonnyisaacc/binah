@@ -53,7 +53,7 @@ commit_all "$tmp/hostile" kit
 git -C "$tmp/hostile" push -q origin main
 git -C "$tmp/hostile" switch -q -c feat/weak
 printf '.*\n' >"$tmp/hostile/policy/branch-name.regex"
-for script in check-branch-name check-one-pr check-secrets check-pr-body check-guardrails-alone; do
+for script in check-branch-name check-one-pr check-secrets check-pr-body check-guardrails-alone check-agent-layout; do
   printf '#!/usr/bin/env bash\nexit 0\n' >"$tmp/hostile/scripts/$script.sh"
 done
 printf 'leak.txt\n' >>"$tmp/hostile/policy/secret-allowlist"
@@ -136,6 +136,26 @@ if PR_NUMBER=7 PATH="$tmp/fakebin:$PATH" run_step "$tmp/hostile" 'guardrail chan
   printf 'a weakened guardrail check on the pull must not pass\n' >&2
   exit 1
 fi
+
+if ! run_step "$tmp/hostile" 'agent layout' >/dev/null 2>"$tmp/err"; then
+  printf 'the kit layout should pass the agent layout step:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+mkdir -p "$tmp/hostile/.cursor/skills/x"
+printf -- '---\nname: x\n---\n' >"$tmp/hostile/.cursor/skills/x/SKILL.md"
+git -C "$tmp/hostile" add .cursor/skills
+if run_step "$tmp/hostile" 'agent layout' >/dev/null 2>"$tmp/err"; then
+  printf 'a weakened layout check on the pull must not pass\n' >&2
+  exit 1
+fi
+if ! grep -q '.cursor/skills holds 1 tracked files' "$tmp/err"; then
+  printf 'the agent layout step should name .cursor/skills:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+git -C "$tmp/hostile" rm -q -r --cached .cursor/skills
+rm -rf "$tmp/hostile/.cursor/skills"
 
 new_repo first
 printf 'app\n' >"$tmp/first/README.md"

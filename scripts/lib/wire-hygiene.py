@@ -13,6 +13,7 @@ REQUIRED = (
     "scripts/check-one-pr.sh",
     "scripts/check-secrets.sh",
     "scripts/check-guardrails-alone.sh",
+    "scripts/check-agent-layout.sh",
 )
 
 GATES = "$RUNNER_TEMP/binah-base"
@@ -122,6 +123,13 @@ def steps_block(indent: str) -> str:
         number,
         f"{key}run: |",
         nested + f'bash "{GATES}/scripts/check-guardrails-alone.sh" --repo "$GITHUB_REPOSITORY" --number "$PR_NUMBER"',
+        f"{indent}- name: agent layout",
+        f"{key}run: |",
+        nested + 'if [ "$GITHUB_EVENT_NAME" = pull_request ]; then',
+        nested + f'  bash "{GATES}/scripts/check-agent-layout.sh"',
+        nested + "else",
+        nested + "  bash scripts/check-agent-layout.sh",
+        nested + "fi",
         f"{indent}# END binah hygiene",
     ]
     return "\n".join(lines) + "\n"

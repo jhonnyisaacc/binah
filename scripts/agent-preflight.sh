@@ -28,6 +28,7 @@ git config --local user.name "$name"
 git config --local user.email "$email"
 git config --global user.name "$name"
 git config --global user.email "$email"
+git config --local push.default current
 
 install_signing() {
   if [[ -n ${SSH_SIGNING_KEY_BASE64:-} ]]; then

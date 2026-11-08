@@ -42,6 +42,11 @@ email=$(git -C "$tmp/repo" config --local --get user.email)
 name=$(git -C "$tmp/repo" config --local --get user.name)
 sign=$(git -C "$tmp/repo" config --local --get commit.gpgsign)
 hooks=$(git -C "$tmp/repo" config --local --get core.hooksPath)
+push_default=$(git -C "$tmp/repo" config --local --get push.default)
+if [[ $push_default != current ]]; then
+  printf 'preflight should set push.default to current, got %s\n' "$push_default" >&2
+  exit 1
+fi
 if [[ $email != '60485595+jhonnyisaacc@users.noreply.github.com' || $name != jhonnyisaacc || $sign != true || $hooks != .githooks ]]; then
   printf 'preflight config mismatch: %s <%s> sign=%s hooks=%s\n' "$name" "$email" "$sign" "$hooks" >&2
   exit 1

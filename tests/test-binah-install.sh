@@ -5,8 +5,8 @@ root=$(git rev-parse --show-toplevel)
 install=$root/scripts/binah-install
 tmp=$(mktemp -d)
 
-copied='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh'
-required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh'
+copied='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/agent-preflight.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh scripts/check-agent-layout.sh scripts/handoff-check.sh'
+required='scripts/check-branch-name.sh scripts/check-pr-body.sh scripts/check-one-pr.sh scripts/check-secrets.sh scripts/check-guardrails-alone.sh scripts/check-agent-layout.sh'
 
 assert_wired() {
   local dest=$1
@@ -387,6 +387,94 @@ write_job "$nosteps" '    runs-on: ubuntu-latest'
 bash "$install" "$nosteps" >/dev/null
 if ! grep -q 'actions/checkout@' "$nosteps/.github/workflows/ci.yml"; then
   printf 'a job with no steps needs a checkout before the gates\n' >&2
+  exit 1
+fi
+
+layout_repo() {
+  repo=$tmp/layout-$1
+  git init -q -b main "$repo"
+  printf 'app\n' >"$repo/README.md"
+}
+
+commit_layout() {
+  git -C "$repo" add -A
+  git -C "$repo" -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m "$1"
+}
+
+refuses() {
+  local label=$1
+  shift
+  if bash "$install" "$repo" >/dev/null 2>"$tmp/err"; then
+    printf '%s: install should refuse\n' "$label" >&2
+    exit 1
+  fi
+  for needle in "$@"; do
+    if ! grep -qF -- "$needle" "$tmp/err"; then
+      printf '%s: refusal did not say %s:\n' "$label" "$needle" >&2
+      cat "$tmp/err" >&2
+      exit 1
+    fi
+  done
+  if [[ -e $repo/policy/author ]]; then
+    printf '%s: a refused install still copied the kit\n' "$label" >&2
+    exit 1
+  fi
+}
+
+layout_repo claude-dir
+mkdir -p "$repo/.claude/skills/verify/features"
+printf -- '---\nname: verify\n---\n' >"$repo/.claude/skills/verify/SKILL.md"
+printf 'x\n' >"$repo/.claude/skills/verify/features/a.md"
+refuses '.claude/skills directory' '.claude/skills is a directory' \
+  '  .claude/skills/verify/SKILL.md' '  .claude/skills/verify/features/a.md'
+
+layout_repo empty-claude-dir
+mkdir -p "$repo/.claude/skills"
+bash "$install" "$repo" >/dev/null
+if [[ $(readlink "$repo/.claude/skills") != ../.agents/skills ]]; then
+  printf 'an empty .claude/skills directory should become the link\n' >&2
+  exit 1
+fi
+
+layout_repo wrong-link
+mkdir -p "$repo/.claude"
+ln -s ../skills "$repo/.claude/skills"
+refuses 'wrong link' '.claude/skills points to ../skills'
+
+layout_repo cursor-tracked
+mkdir -p "$repo/.cursor/skills/verify-web"
+printf -- '---\nname: verify-web\n---\n' >"$repo/.cursor/skills/verify-web/SKILL.md"
+commit_layout 'cursor skill'
+refuses 'tracked .cursor/skills' 'git mv these tracked files' '  .cursor/skills/verify-web/SKILL.md'
+
+layout_repo cursor-untracked
+mkdir -p "$repo/.cursor/skills/scratch"
+printf 'local\n' >"$repo/.cursor/skills/scratch/notes.md"
+bash "$install" "$repo" >/dev/null
+
+layout_repo upgrade
+mkdir -p "$repo/.cursor/skills/agent-preflight"
+printf 'old copy\n' >"$repo/.cursor/skills/agent-preflight/SKILL.md"
+commit_layout 'old kit'
+bash "$install" "$repo" >/dev/null
+if [[ -e $repo/.cursor/skills ]]; then
+  printf 'the upgrade left the old .cursor/skills copy behind\n' >&2
+  exit 1
+fi
+if ! cmp -s "$root/skills/agent-preflight/SKILL.md" "$repo/.agents/skills/agent-preflight/SKILL.md"; then
+  printf 'the upgrade did not write .agents/skills/agent-preflight/SKILL.md\n' >&2
+  exit 1
+fi
+commit_layout 'new kit'
+if ! (cd "$repo" && bash scripts/check-agent-layout.sh) >"$tmp/out" 2>"$tmp/err"; then
+  printf 'a committed install should pass its own layout check:\n' >&2
+  cat "$tmp/err" >&2
+  exit 1
+fi
+bash "$install" "$repo" >/dev/null
+if [[ -n $(git -C "$repo" status --porcelain) ]]; then
+  printf 'a second install changed the tree:\n' >&2
+  git -C "$repo" status --porcelain >&2
   exit 1
 fi
 
