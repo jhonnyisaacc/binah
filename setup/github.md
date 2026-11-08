@@ -22,12 +22,12 @@ Repo under `jhonnyisaacc`; 2FA on the account.
 2. Merge settings: https://github.com/<owner>/<repo>/settings → allow squash only; default squash message "PR title and description" (see https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/configuring-commit-squashing-for-pull-requests).
 3. Turn Copilot code review off: see https://docs.github.com/en/copilot/how-tos/use-copilot-agents/request-a-code-review/configure-automatic-review (exact path *unverified*).
 4. Add repo secrets: https://github.com/<owner>/<repo>/settings/secrets/actions → New repository secret (names in the table).
-5. Fine-grained token for Bugbot: https://github.com/settings/personal-access-tokens/new → only this repo → Pull requests: Read and write, Issues: Read and write → expiry 90 days → save as `BUGBOT_TRIGGER_PAT`.
+5. Fine-grained token for Bugbot: https://github.com/settings/personal-access-tokens/new → only this repo → Pull requests: Read and write, Issues: Read and write → expiry 90 days → save as `BUGBOT_TRIGGER_PATH`.
 
 ## Secrets and tokens
 | Name | Where stored | Scope | Rotation |
 |---|---|---|---|
-| `BUGBOT_TRIGGER_PAT` | repo Actions secret | fine-grained, one repo, Pull requests + Issues write | 90 days |
+| `BUGBOT_TRIGGER_PATH` | repo Actions secret | fine-grained, one repo, Pull requests + Issues write | 90 days |
 | `STAGING_API_URL` | repo Actions secret | config value, not a credential | on URL change |
 | (Cloudflare, Railway, Expo) | repo Actions secrets | see their files | see their files |
 

@@ -1,4 +1,4 @@
-# Agent-friendly refactoring rules (v4.9, 2026-11-07)
+# Agent-friendly refactoring rules (v4.10, 2026-11-08)
 
 Versioning: MAJOR.MINOR. Bump the minor number for polish (wording, a new check, a resolved open question) and the major number for structural changes (new tiers, a new process stage, a changed role split). Every change gets a line in the changelog at the bottom.
 
@@ -77,7 +77,7 @@ A `preflight` workflow (or a throwaway `chore/preflight-<date>` draft PR from a 
 - Slow or optional tier: preview deploy, e2e against the preview, data-parity suites, scheduled upstream checks, Bugbot.
 - Every workflow has `concurrency` with cancel-in-progress, caches bun and pip, and one install per job. Suites in the same language share one workflow with a matrix. Empty or deprecated workflows are deleted, and a check that guarded a finished migration is scoped to its paths or folded.
 - `railway-staging.yml`: on `ready_for_review` and `synchronize` of a ready PR that touches the API paths, `railway up --service <svc> --environment staging` with `RAILWAY_TOKEN` (a project token scoped to staging), then waits for the health route. It never touches production.
-- `bugbot-trigger.yml`: while a non-docs PR is still a draft, and before it is marked ready, it comments `bugbot run` with Jhonny's fine-grained PAT (`BUGBOT_TRIGGER_PAT`, this repo, pull requests: write). It does not wait for the ready event. It never checks out PR code.
+- `bugbot-trigger.yml`: while a non-docs PR is still a draft, and before it is marked ready, it comments `bugbot run` with Jhonny's fine-grained PAT (`BUGBOT_TRIGGER_PATH`, this repo, pull requests: write). It does not wait for the ready event. It never checks out PR code.
 - CI babysit starts one fix agent per failing pull request or per failing `main` commit. Two failed jobs on the same pull request and the same commit are one task. A branch with no open pull request is ignored. The claim is written before the agent launches. Enforcement: `scripts/ci-babysit.sh`, procedure in `bots/routines/ci-babysit.md`.
 - A gate change ships with a test of the gate and allows additive data by design.
 
@@ -211,6 +211,7 @@ Applies only when the repo has a site on Cloudflare, Vercel, Netlify, or a simil
 - Marking a PR ready starts the preview for manual testing and also turns on auto-merge. Can the manual test finish before auto-merge merges a green PR?
 
 ## Changelog
+- 4.10 (2026-11-08): the Bugbot trigger secret is named `BUGBOT_TRIGGER_PATH`, matching davar.
 - 4.9 (2026-11-07): one tool-neutral skills tree. Skills live in `.agents/skills`, `.claude/skills` links to it, `binah-install` writes the agent-preflight skill there and refuses a `.claude/skills` directory or tracked `.cursor/skills` files, and `scripts/check-agent-layout.sh` runs in pre-push and `hygiene`. Preflight sets `push.default` to `current`. `scripts/handoff-check.sh` ships with the kit.
 - 4.8 (2026-11-04): `binah-install` wires the hygiene job. One pull request, one job (`scripts/check-one-pr.sh`) fails a later merge into an open pull, fails when stack depth is over 2 (`stack depth 3 is over the limit of 2`), and fails when this pull is the 6th or later open pull (`pull #N is the 6th open pull; the limit is 5`). A recovery fold passes only when `policy/backlog-recovery` on the default branch lists that pull. The label exemption was dropped because agents hold Jhonny's credentials. Adding a number to that file is Tier A (editing guardrail files). Pull request body (`scripts/check-pr-body.sh`) and the current-tree secret scan (`scripts/check-secrets.sh`) are required enforcers. History-scanning Gitleaks stays off until that scan passes and fixtures are allowlisted.
 - 4.8 (2026-11-04): integration branch names are read from `policy/integration-branches` (one exact name or glob per line, numbered `refactor/run-<nn>` names when the file is missing).
