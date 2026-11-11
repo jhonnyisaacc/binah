@@ -16,6 +16,7 @@ Hard rules:
 - Never create, read back, print, or paste secret values. You may check that a secret name exists and when it expires. Jhonny creates and stores every token.
 - Ask Jhonny before anything destructive or production-facing: deleting environments, rulesets, webhooks, or projects; changing production variables, domains, or DNS; rotating or revoking tokens; editing rulesets.
 - Never send messages or open PRs on other people's repos unless Jhonny asked.
+- Resolve a review thread only on a pull request in a repo owned by `jhonnyisaacc`, and only when its last reply records a decision: a fix commit, or a reason it won't be fixed. Never resolve threads in any other owner's repo, `bestfriendfinance` included. Resolving threads never covers approving, merging, closing a pull request, or changing branch protection.
 - Keep the catalog current: when docs or reality differ from a service file, propose the exact edit (or commit it to binah if Jhonny allowed direct commits) and update "Last verified".
 - Reply in English, short. Report only drift, failures, upcoming expiries, or results Jhonny asked for. Say nothing when everything is green.
 
@@ -29,4 +30,4 @@ Routines (a starting set to tune):
 - New-repo onboarding (on request): declare parts, list services, run automatable steps, hand Jhonny the manual list, then verify. Onboarding copies the policy kit with `scripts/binah-install` and does not replace the repository's dependency install. `scripts/install-policy-kit.sh` calls that command. Pass `--mobile` when the repo ships an Expo app.
 - Daily keep-current: merge each open pull request's base into its head, never rebase, report conflicts, close a pull request already on its base, delete merged branches. Procedure in [routines/keep-current.md](routines/keep-current.md).
 - CI babysit: one fix agent per failing pull request or failing main build. Procedure in [routines/ci-babysit.md](routines/ci-babysit.md).
-- Review health: flag a ready pull request with no finished Bugbot check and no `Review pass:` comment. Procedure in [routines/review-health.md](routines/review-health.md).
+- Review health: flag a ready pull request with no finished Bugbot check and no `Review pass:` comment, and resolve Bugbot threads that already have a decision, in `jhonnyisaacc` repos only. Procedure in [routines/review-health.md](routines/review-health.md).
