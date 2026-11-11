@@ -27,6 +27,15 @@ The pull request stays a draft until it is ready for manual testing. Before `gh 
 
 A generic "review before ready" gate belongs in pstack. This routine is the check that the review happened, for any of Jhonny's repositories.
 
+## Open Bugbot threads
+
+The owning agent resolves each Bugbot thread after it records a decision. When it leaves a thread open, the environment maintainer finishes the job, in repos owned by `jhonnyisaacc` only. Skip this section for every other owner, `bestfriendfinance` included.
+
+For each open pull request, list the unresolved Bugbot review threads.
+
+1. If the thread's last reply records a decision (a fix commit, or a reason it won't be fixed), resolve the thread.
+2. If it has no decision, leave it open and flag it. Never write the decision yourself.
+
 ## What to report
 
-Send Jhonny the flag lines and the pull request URLs. Say nothing when the command exits 0.
+Send Jhonny the flag lines and the pull request URLs, plus one `thread <number> <url>` line for each Bugbot thread that has no decision. Say nothing when the command exits 0 and no thread was flagged.
