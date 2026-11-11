@@ -1,6 +1,6 @@
 # Merge playbook
 
-Version: 4.9 (matches rules.md).
+Version: 4.10 (matches rules.md).
 
 PR state follows rules.md. Open a PR as a draft while it is in development, so preview and deploy workflows do not run on every push. Mark it ready when it is ready for manual testing. pstack says to open every PR ready. In a repo governed by rules.md, rules.md wins. Until a repo has the auto-merge setup, the agent that owns a PR merges it itself (`gh pr merge <n> --squash`) once it is ready, CI is green, `guard-paths` passes, and every Bugbot thread has a decision (a fix commit or a won't-fix reason) and is resolved. While the pull request is still a draft, and before it is marked ready, the agent arranges a `bugbot run` comment. Bugbot ignores agent accounts, so `bugbot-trigger.yml` or Refa posts it as Jhonny. If no finished Bugbot check appears within 15 minutes, the agent writes one pstack review pass as a comment that starts a line with `Review pass:`, then marks the pull request ready. Tier A PRs wait for Jhonny's approval label. Where this file says "auto-merge", read "the owning agent merges" until the setup exists.
 
